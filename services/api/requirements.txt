@@ -1,0 +1,17 @@
+# Runtime — the API container. Deliberately does NOT include torch:
+# models are served via ONNX so the web container stays small and boots fast.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+httpx==0.28.1
+numpy==2.2.1
+pandas==2.2.3
+scikit-learn==1.6.0
+SQLAlchemy==2.0.36
+psycopg[binary]==3.2.3
+GeoAlchemy2==0.16.0
+redis==5.2.1
+python-multipart==0.0.20
+onnxruntime==1.20.1
+Pillow==11.1.0

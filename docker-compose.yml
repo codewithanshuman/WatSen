@@ -1,0 +1,58 @@
+# WatSen — full stack.
+#   docker compose up            -> api on :8000, web on :5173
+#   STORE_BACKEND=mock is the default, so this runs with NO API keys at all.
+
+services:
+  db:
+    profiles: ["infrastructure"]
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: aqua
+      POSTGRES_PASSWORD: aqua
+      POSTGRES_DB: aquasentinel
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aqua -d aquasentinel"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  cache:
+    profiles: ["infrastructure"]
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: ./services/api
+    environment:
+      STORE_BACKEND: ${STORE_BACKEND:-mock}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
+      OPENAQ_API_KEY: ${OPENAQ_API_KEY:-}
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports: ["8000:8000"]
+    volumes:
+      - ./services/api/app:/srv/app
+      - ./models:/srv/models
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    depends_on: [api]
+    environment:
+      VITE_API_BASE: http://localhost:8000
+    ports: ["5173:5173"]
+    volumes:
+      - ./web:/app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+
+volumes:
+  pgdata:

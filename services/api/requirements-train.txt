@@ -1,0 +1,10 @@
+# Training only — never installed in the API container.
+# Install torch separately for CPU:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+-r requirements.txt
+torch>=2.4
+torchvision>=0.19
+shap>=0.46
+matplotlib>=3.9
+tqdm>=4.66
+onnx>=1.17

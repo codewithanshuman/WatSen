@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.cache/
+node_modules/
+dist/
+!web/dist/
+!web/dist/**
+.vercel/
+models/*.pkl
+models/*.pt
+models/*.onnx
+data/
