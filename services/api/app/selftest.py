@@ -71,6 +71,21 @@ def run(client) -> int:
         return "168h x 7 variables"
     check("history", history)
 
+    def live_context():
+        d = get(f"/v1/segments/{code}/live-context")
+        _assert(d["segment_code"] == code, "live context returned the wrong reach")
+        _assert(d["mode"] in ("live", "unavailable"), "invalid live-context mode")
+        _assert(d["source"]["name"] == "Open-Meteo Forecast API", "source provenance missing")
+        _assert(len(d["limitations"]) >= 1, "live context has no limitation disclosure")
+        if d["mode"] == "live":
+            _assert(d["current"], "live context has no current values")
+            _assert(all("unit" in item and "observed_at" in item for item in d["current"]),
+                    "live values are missing units or timestamps")
+        cached = get(f"/v1/segments/{code}/live-context")
+        _assert(cached["cache"] == "hit", "live context was not cached")
+        return f"{d['mode']}, cache={cached['cache']}"
+    check("live context provenance", live_context)
+
     def forecast():
         d = get(f"/v1/segments/{code}/forecast")
         pts = d["points"]

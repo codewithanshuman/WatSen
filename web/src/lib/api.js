@@ -1,5 +1,6 @@
-const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname)
-const BASE = import.meta.env.VITE_API_BASE || (isLocal ? 'http://localhost:8000' : '')
+const isLocalDevServer = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+  && ['3000', '4173', '5173'].includes(window.location.port)
+const BASE = import.meta.env.VITE_API_BASE || (isLocalDevServer ? 'http://localhost:8000' : '')
 
 async function get(path, params = {}) {
   const qs = new URLSearchParams(
@@ -17,6 +18,7 @@ export const api = {
   geojson: (scenario, horizon = 0) => get('/v1/segments.geojson', { scenario, horizon }),
   segment: (code, scenario) => get(`/v1/segments/${code}`, { scenario }),
   history: (code, hours, scenario) => get(`/v1/segments/${code}/history`, { hours, scenario }),
+  liveContext: (code, refresh = false) => get(`/v1/segments/${code}/live-context`, { refresh }),
   forecast: (code, scenario) => get(`/v1/segments/${code}/forecast`, { scenario }),
   brief: (code, scenario) => get(`/v1/segments/${code}/brief`, { scenario }),
   alerts: (scenario) => get('/v1/alerts', { scenario }),

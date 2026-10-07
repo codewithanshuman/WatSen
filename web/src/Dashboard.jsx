@@ -42,6 +42,7 @@ export default function Dashboard({ initialView = 'Network', onHome, onNavigate 
   const [reviewQueue, setReviewQueue] = useState(null)
   const [fhirCheck, setFhirCheck] = useState(null)
   const [modelCard, setModelCard] = useState(null)
+  const [liveContext, setLiveContext] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -81,7 +82,7 @@ export default function Dashboard({ initialView = 'Network', onHome, onNavigate 
     let cancelled = false
     setDetailLoading(true); setBrief(null)
     setForecast(null); setHistory(null); setFailure(null); setInterventions(null)
-    setSufficiency(null); setOneHealth(null); setGraph(null); setIncident(null); setFhirCheck(null); setObservations([]); setReviewQueue(null)
+    setSufficiency(null); setOneHealth(null); setGraph(null); setIncident(null); setFhirCheck(null); setObservations([]); setReviewQueue(null); setLiveContext(null)
     Promise.all([
       api.history(active, HOURS, scenario), api.forecast(active, scenario),
       api.observations(active), api.failureChain(active, scenario),
@@ -95,6 +96,9 @@ export default function Dashboard({ initialView = 'Network', onHome, onNavigate 
       setGraph(eg); setIncident(inc); setFhirCheck(fv); setReviewQueue(rq)
     }).catch(e => { if (!cancelled) setError(e.message) }).finally(() => { if (!cancelled) setDetailLoading(false) })
     api.brief(active, scenario).then(b => { if (!cancelled) setBrief(b) }).catch(() => {})
+    api.liveContext(active).then(context => { if (!cancelled) setLiveContext(context) }).catch(() => {
+      if (!cancelled) setLiveContext({ mode: 'unavailable', status: 'unavailable', current: [], next_24h: {}, source: { name: 'Open-Meteo Forecast API' }, limitations: ['Live context could not be reached. No demo value was substituted.'] })
+    })
     return () => { cancelled = true }
   }, [active, scenario, refresh])
 
@@ -135,7 +139,7 @@ export default function Dashboard({ initialView = 'Network', onHome, onNavigate 
       {error && <div className="error-banner" role="alert"><Icon name="alert"/>{error}<button onClick={refreshEvidence}>Try again</button></div>}
       {loading && !seg ? <div className="workspace-loading" role="status"><span className="loading-orb"/><h2>Bringing your catchment into focus</h2><p>Connecting the sensor and biological evidence.</p></div> : <div className="view-content" key={view}>
         {detailLoading && <div className="sync-note" role="status"><span/> Updating the selected reach…</div>}
-        {view === 'Network' && <CommandCentre {...{seg, segments, networkHealth, activeAlerts, emerging, predictedPeak, geojson, horizon, setHorizon, setActive, hotspots, history, forecast, failure, interventions, sufficiency}} onEvidence={() => navigate('Evidence')} />}
+        {view === 'Network' && <CommandCentre {...{seg, segments, networkHealth, activeAlerts, emerging, predictedPeak, geojson, horizon, setHorizon, setActive, hotspots, history, forecast, failure, interventions, sufficiency, liveContext}} onEvidence={() => navigate('Evidence')} />}
         {view === 'Evidence' && <EvidenceLoop key={active} {...{seg, observations, reviewQueue, graph, incident, refreshEvidence}} />}
         {view === 'One Health' && <OneHealthView {...{oneHealth, brief}} />}
         {view === 'Standards' && <InteropView {...{seg, scenario, fhirCheck, modelCard, forecast}} />}
@@ -145,13 +149,14 @@ export default function Dashboard({ initialView = 'Network', onHome, onNavigate 
   </div>
 }
 
-function CommandCentre({ seg, segments, networkHealth, activeAlerts, emerging, predictedPeak, geojson, horizon, setHorizon, setActive, hotspots, history, forecast, failure, interventions, sufficiency, onEvidence }) {
+function CommandCentre({ seg, segments, networkHealth, activeAlerts, emerging, predictedPeak, geojson, horizon, setHorizon, setActive, hotspots, history, forecast, failure, interventions, sufficiency, liveContext, onEvidence }) {
   const [chosen, setChosen] = useState(null)
   useEffect(() => setChosen(null), [interventions?.segment_code, interventions?.scenario])
   const recommendation = chosen || interventions?.recommended
   const intervention = interventions?.interventions.find(x => x.key === recommendation)
   const chart = useForecastChart(history, forecast, intervention)
   const accepted = segments.reduce((a, s) => a + (s.biological_evidence?.n_observations || 0), 0)
+  const liveValues = Object.fromEntries((liveContext?.current || []).map(item => [item.key, item]))
   return <>
     <section className="catchment-summary">
       <div className="summary-copy"><p className="eyebrow"><Icon name="wave" size={15}/> Catchment intelligence</p><h2>{seg?.name || 'Your catchment'}</h2><p>{failure?.primary_driver ? <>Watch for <strong>{failure.primary_driver.toLowerCase()}</strong>. Explore the forecast and compare possible responses below.</> : 'Connecting the latest environmental signals with the biological record.'}</p><div className="summary-tags"><span><Icon name="pin" size={14}/>{seg?.city || 'European network'}</span><span><Icon name="clock" size={14}/>72-hour outlook</span><span>{seg?.code}</span></div></div>
@@ -159,6 +164,24 @@ function CommandCentre({ seg, segments, networkHealth, activeAlerts, emerging, p
         <div><span>Current stress</span><strong>{seg ? Math.round(seg.stress) : '—'}<small>/100</small></strong><p className={seg?.band}>{BAND[seg?.band]?.label || 'Loading'} condition</p></div>
         <Icon name="arrow" size={24}/>
         <div><span>Forecast peak</span><strong>{predictedPeak == null ? '—' : Math.round(predictedPeak)}<small>/100</small></strong><p>Within 72 hours</p></div>
+      </div>
+    </section>
+    <section className={`live-context ${liveContext?.mode || 'loading'}`} aria-label="Live environmental context">
+      <div className="live-context-title">
+        <span className="live-context-icon"><Icon name="spark" size={18}/></span>
+        <span><small>External evidence layer</small><b>Live climate context</b></span>
+        <em>{liveContext?.mode === 'live' ? 'LIVE' : liveContext ? 'UNAVAILABLE' : 'CONNECTING'}</em>
+      </div>
+      <div className="live-context-values">
+        <span><small>Air temperature</small><b>{liveValues.temperature_2m ? `${liveValues.temperature_2m.value}${liveValues.temperature_2m.unit}` : '—'}</b></span>
+        <span><small>Current precipitation</small><b>{liveValues.precipitation ? `${liveValues.precipitation.value} ${liveValues.precipitation.unit}` : '—'}</b></span>
+        <span><small>Next 24 h</small><b>{liveContext?.next_24h?.precipitation_sum_mm == null ? '—' : `${liveContext.next_24h.precipitation_sum_mm} mm`}</b></span>
+        <span><small>Peak rain chance</small><b>{liveContext?.next_24h?.precipitation_probability_max_pct == null ? '—' : `${liveContext.next_24h.precipitation_probability_max_pct}%`}</b></span>
+      </div>
+      <div className="live-context-source">
+        <span><Icon name="clock" size={14}/>{liveContext?.observed_at ? `${new Date(liveContext.observed_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })} · ${liveContext.timezone}` : 'No live timestamp'}</span>
+        <span>{liveContext?.source?.name || 'Connecting to source'}</span>
+        <p>{liveContext?.limitations?.[0] || 'Loading source and provenance details…'}</p>
       </div>
     </section>
     <section className="metric-strip" aria-label="Network indicators">

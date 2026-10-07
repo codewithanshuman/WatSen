@@ -24,6 +24,8 @@ from app.core.anomaly import Submission
 from app.insight import brief as brief_engine
 from app.store import get_store
 from app.ml.vision import VisionRuntime
+from app.ingest.live_context import live_context
+from app.core.synthetic import BY_CODE
 
 app = FastAPI(
     title="WatSen API",
@@ -152,6 +154,14 @@ def get_history(code: str, hours: int = Query(336, ge=24, le=24 * 240),
     if code not in store.segments:
         raise HTTPException(404, f"unknown segment {code}")
     return store.history(code, hours=hours, scenario=scenario)
+
+
+@app.get("/v1/segments/{code}/live-context", tags=["segments"])
+def get_live_context(code: str, refresh: bool = False):
+    """Live weather context, never silently substituted for water evidence."""
+    if code not in BY_CODE:
+        raise HTTPException(404, f"unknown segment {code}")
+    return live_context(BY_CODE[code], force=refresh)
 
 
 # ── forecast ───────────────────────────────────────────────────────
