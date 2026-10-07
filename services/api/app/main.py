@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.core import fhir
 from app.core import decision
+from app.core import catchment
 from app.core.scenarios import SCENARIOS
 from app.core.anomaly import Submission
 from app.insight import brief as brief_engine
@@ -338,6 +339,14 @@ def get_interventions(
     }
     weights = {key: value for key, value in requested.items() if value is not None}
     return decision.intervention_search(summary, history, forecast, weights or None)
+
+
+@app.get("/v1/segments/{code}/catchment-twin", tags=["resilience"])
+def get_catchment_twin(code: str, scenario: str = SCENARIO_Q):
+    """Directed planning schematic; explicitly not a calibrated flow model."""
+    _, summary, history, forecast = _decision_inputs(code, scenario)
+    interventions = decision.intervention_search(summary, history, forecast)
+    return catchment.catchment_twin(summary, forecast, interventions)
 
 
 @app.get("/v1/segments/{code}/evidence-graph", tags=["resilience"])

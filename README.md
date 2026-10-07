@@ -19,6 +19,7 @@ One Health communication in one auditable loop.
 - **Forecast evidence:** [docs/FORECAST_EVALUATION.md](docs/FORECAST_EVALUATION.md)
 - **FHIR conformance evidence:** [docs/FHIR_CONFORMANCE.md](docs/FHIR_CONFORMANCE.md)
 - **Intervention decision method:** [docs/INTERVENTION_MCDA.md](docs/INTERVENTION_MCDA.md)
+- **Catchment twin boundary:** [docs/CATCHMENT_TWIN.md](docs/CATCHMENT_TWIN.md)
 
 ## Run the complete demo
 
@@ -88,6 +89,8 @@ the recent evidence stands on its own.
 
 - Interactive predictive resilience map with a now-to-72-hour timeline
 - Regional risk radar and emerging-hotspot detection
+- Interactive seven-node directed catchment operations room with 72-hour
+  propagation playback, protected assets and switchable response plans
 - 72-hour direct multi-horizon Ridge forecast with held-out residual calibration
 - Reproducible chronological and leave-one-site-out evaluation against
   persistence and 24-hour seasonal baselines
@@ -134,6 +137,7 @@ make train-classifier
 GET  /v1/hotspots
 GET  /v1/segments/{code}/failure-chain
 GET  /v1/segments/{code}/interventions
+GET  /v1/segments/{code}/catchment-twin
 GET  /v1/segments/{code}/evidence-graph
 GET  /v1/segments/{code}/data-sufficiency
 GET  /v1/segments/{code}/one-health
@@ -202,7 +206,9 @@ instead of allowing `/health` to misreport the active backend.
 4. Show widening uncertainty and the adaptive citizen mission.
 5. Upload a photograph; explain that AI suggests and a human confirms.
 6. Confirm the observation and show the biological evidence window update.
-7. Move an intervention priority, inspect the score breakdown and show how the
+7. Play the directed catchment pulse, switch response plans and inspect a
+   protected habitat or community asset.
+8. Move an intervention priority, inspect the score breakdown and show how the
    recommendation and sensitivity result respond.
-8. Open the measurable One Health bridge and cited brief.
-9. Finish with the OAH-profiled FHIR bundle, provenance and validation status.
+9. Open the measurable One Health bridge and cited brief.
+10. Finish with the OAH-profiled FHIR bundle, provenance and validation status.

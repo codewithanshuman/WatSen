@@ -18,10 +18,12 @@ Completed locally on `next-level` (not pushed to the submitted deployment):
   OAH source commit and validator checksum; and
 - transparent eight-criterion intervention MCDA with editable weights, five
   priority profiles, score decomposition, direct-action guardrails, and
-  deterministic 21-case sensitivity analysis.
+  deterministic 21-case sensitivity analysis; and
+- a seven-node directed catchment operations room with propagation playback,
+  protected habitat/community assets, response-plan switching and an explicit
+  non-hydraulic model boundary.
 
-Next implementation target: the directed catchment graph and propagation view,
-followed by offline field capture.
+Next implementation target: offline field capture and resilient synchronization.
 
 ## Product position
 

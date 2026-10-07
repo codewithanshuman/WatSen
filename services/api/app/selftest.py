@@ -152,7 +152,7 @@ def run(client) -> int:
     )(get("/v1/contributors/selftest")))
 
     def resilience():
-        for suffix in ("failure-chain", "interventions", "evidence-graph", "data-sufficiency", "one-health", "incident"):
+        for suffix in ("failure-chain", "interventions", "catchment-twin", "evidence-graph", "data-sufficiency", "one-health", "incident"):
             d = get(f"/v1/segments/{code}/{suffix}?scenario=storm")
             _assert(isinstance(d, dict) and d, f"empty {suffix}")
         decision = get(f"/v1/segments/{code}/interventions?scenario=storm")
@@ -184,10 +184,24 @@ def run(client) -> int:
                 "resource-efficiency stress test did not alter the ranking")
         _assert(cost_first["recommended"] != "citizen_sampling",
                 "verification action escaped the primary-response guardrail")
+        twin = get(f"/v1/segments/{code}/catchment-twin?scenario=storm")
+        node_ids = {node["id"] for node in twin["nodes"]}
+        _assert(len(node_ids) == 7 and len(twin["edges"]) == 7,
+                "catchment twin topology drifted")
+        _assert(twin["model"]["kind"] == "deterministic-topology-prior",
+                "catchment model boundary is missing")
+        _assert("not a calibrated" in twin["model"]["boundary"].lower(),
+                "catchment twin does not disclose its model boundary")
+        _assert(twin["pressure"]["origin"] in node_ids, "pressure origin is not a node")
+        _assert(len(twin["protected_assets"]) == 2, "protected assets are missing")
+        _assert(twin["recommended_plan"] in {plan["key"] for plan in twin["plans"]},
+                "recommended catchment plan is unavailable")
+        _assert(all(set(plan["node_outcomes"]) == node_ids for plan in twin["plans"]),
+                "a response plan is missing node outcomes")
         hot = get("/v1/hotspots?scenario=storm")["hotspots"]
         _assert(len(hot) >= 3, "hotspot radar is empty")
         return (f"MCDA {len(ranked)} options / {decision['sensitivity']['scenarios_evaluated']} "
-                "sensitivity tests, graph, mission, One Health and replay")
+                "sensitivity tests, 7-node directed twin, mission, One Health and replay")
     check("resilience loop", resilience)
 
     def brief():

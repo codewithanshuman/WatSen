@@ -35,6 +35,7 @@ export default function Dashboard({ initialView = 'Network', onHome, onNavigate 
   const [hotspots, setHotspots] = useState([])
   const [failure, setFailure] = useState(null)
   const [interventions, setInterventions] = useState(null)
+  const [catchmentTwin, setCatchmentTwin] = useState(null)
   const [sufficiency, setSufficiency] = useState(null)
   const [oneHealth, setOneHealth] = useState(null)
   const [graph, setGraph] = useState(null)
@@ -81,18 +82,18 @@ export default function Dashboard({ initialView = 'Network', onHome, onNavigate 
     if (!active) return
     let cancelled = false
     setDetailLoading(true); setBrief(null)
-    setForecast(null); setHistory(null); setFailure(null); setInterventions(null)
+    setForecast(null); setHistory(null); setFailure(null); setInterventions(null); setCatchmentTwin(null)
     setSufficiency(null); setOneHealth(null); setGraph(null); setIncident(null); setFhirCheck(null); setObservations([]); setReviewQueue(null); setLiveContext(null)
     Promise.all([
       api.history(active, HOURS, scenario), api.forecast(active, scenario),
       api.observations(active), api.failureChain(active, scenario),
-      api.interventions(active, scenario), api.sufficiency(active, scenario),
+      api.interventions(active, scenario), api.catchmentTwin(active, scenario), api.sufficiency(active, scenario),
       api.oneHealth(active, scenario), api.evidenceGraph(active, scenario),
       api.incident(active, scenario), api.fhirValidation(active, scenario), api.reviewQueue(),
-    ]).then(([h, f, o, fc, it, ds, oh, eg, inc, fv, rq]) => {
+    ]).then(([h, f, o, fc, it, ct, ds, oh, eg, inc, fv, rq]) => {
       if (cancelled) return
       setHistory(h); setForecast(f); setObservations(o.observations)
-      setFailure(fc); setInterventions(it); setSufficiency(ds); setOneHealth(oh)
+      setFailure(fc); setInterventions(it); setCatchmentTwin(ct); setSufficiency(ds); setOneHealth(oh)
       setGraph(eg); setIncident(inc); setFhirCheck(fv); setReviewQueue(rq)
     }).catch(e => { if (!cancelled) setError(e.message) }).finally(() => { if (!cancelled) setDetailLoading(false) })
     api.brief(active, scenario).then(b => { if (!cancelled) setBrief(b) }).catch(() => {})
@@ -139,7 +140,7 @@ export default function Dashboard({ initialView = 'Network', onHome, onNavigate 
       {error && <div className="error-banner" role="alert"><Icon name="alert"/>{error}<button onClick={refreshEvidence}>Try again</button></div>}
       {loading && !seg ? <div className="workspace-loading" role="status"><span className="loading-orb"/><h2>Bringing your catchment into focus</h2><p>Connecting the sensor and biological evidence.</p></div> : <div className="view-content" key={view}>
         {detailLoading && <div className="sync-note" role="status"><span/> Updating the selected reach…</div>}
-        {view === 'Network' && <CommandCentre {...{seg, segments, networkHealth, activeAlerts, emerging, predictedPeak, geojson, horizon, setHorizon, setActive, hotspots, history, forecast, failure, interventions, sufficiency, liveContext}} onEvidence={() => navigate('Evidence')} />}
+        {view === 'Network' && <CommandCentre {...{seg, segments, networkHealth, activeAlerts, emerging, predictedPeak, geojson, horizon, setHorizon, setActive, hotspots, history, forecast, failure, interventions, catchmentTwin, sufficiency, liveContext}} onEvidence={() => navigate('Evidence')} />}
         {view === 'Evidence' && <EvidenceLoop key={active} {...{seg, observations, reviewQueue, graph, incident, refreshEvidence}} />}
         {view === 'One Health' && <OneHealthView {...{oneHealth, brief}} />}
         {view === 'Standards' && <InteropView {...{seg, scenario, fhirCheck, modelCard, forecast}} />}
@@ -149,7 +150,7 @@ export default function Dashboard({ initialView = 'Network', onHome, onNavigate 
   </div>
 }
 
-function CommandCentre({ seg, segments, networkHealth, activeAlerts, emerging, predictedPeak, geojson, horizon, setHorizon, setActive, hotspots, history, forecast, failure, interventions, sufficiency, liveContext, onEvidence }) {
+function CommandCentre({ seg, segments, networkHealth, activeAlerts, emerging, predictedPeak, geojson, horizon, setHorizon, setActive, hotspots, history, forecast, failure, interventions, catchmentTwin, sufficiency, liveContext, onEvidence }) {
   const [chosen, setChosen] = useState(null)
   const [decisionWeights, setDecisionWeights] = useState({})
   const [weightProfile, setWeightProfile] = useState('balanced')
@@ -221,6 +222,8 @@ function CommandCentre({ seg, segments, networkHealth, activeAlerts, emerging, p
       </section>
     </div>
 
+    <CatchmentOperationsRoom twin={catchmentTwin}/>
+
     <section className="panel forecast-panel">
       <PanelTitle title="A clearer view of what comes next" tag="72-hour forecast"/>
       <div className="forecast-heading"><div><span className="panel-subtitle">Stress trajectory</span><p><b>{predictedPeak == null ? '—' : Math.round(predictedPeak)}</b> forecast peak <span>· {forecast?.interval_label || 'Calculating uncertainty'}</span></p></div><div className="chart-legend"><span><i/>Current evidence</span><span><i/>Forecast</span><span><i/>With intervention</span></div></div>
@@ -280,6 +283,98 @@ function CommandCentre({ seg, segments, networkHealth, activeAlerts, emerging, p
       <p className="simulation-note"><b>Decision boundary:</b> these are counterfactual planning comparisons, not causal promises or procurement estimates. Expert judgement, permits and field verification remain required.</p>
     </section>
   </>
+}
+
+function CatchmentOperationsRoom({ twin }) {
+  const [time, setTime] = useState(0)
+  const [planKey, setPlanKey] = useState(null)
+  const [selectedNode, setSelectedNode] = useState('monitor')
+  const [playing, setPlaying] = useState(false)
+  useEffect(() => {
+    setTime(0); setPlanKey(twin?.recommended_plan || 'observe'); setSelectedNode('monitor'); setPlaying(false)
+  }, [twin?.segment_code, twin?.scenario, twin?.recommended_plan])
+  useEffect(() => {
+    if (!playing) return undefined
+    const timer = setInterval(() => setTime(current => {
+      if (current >= 72) { setPlaying(false); return 72 }
+      return current + 1
+    }), 260)
+    return () => clearInterval(timer)
+  }, [playing])
+  if (!twin) return <section className="panel twin-panel twin-loading"><PanelTitle title="Catchment operations room" tag="CONNECTING TOPOLOGY"/><span className="loading-orb"/><p>Building the directed planning schematic…</p></section>
+
+  const nodes = twin.nodes || []
+  const byId = Object.fromEntries(nodes.map(node => [node.id, node]))
+  const plan = twin.plans.find(item => item.key === planKey) || twin.plans[0]
+  const nodeValue = node => {
+    const outcome = plan.node_outcomes[node.id]
+    if (node.arrival_h == null || time < node.arrival_h) return node.baseline_stress
+    if (time <= node.peak_h) {
+      const progress = (time - node.arrival_h) / Math.max(1, node.peak_h - node.arrival_h)
+      return node.baseline_stress + (outcome - node.baseline_stress) * progress
+    }
+    const recovery = Math.min(1, (time - node.peak_h) / 28)
+    return outcome + (node.baseline_stress - outcome) * recovery
+  }
+  const nodeBand = value => value >= 75 ? 'critical' : value >= 50 ? 'watch' : 'stable'
+  const detail = byId[selectedNode] || nodes[0]
+  const detailValue = nodeValue(detail)
+  const criticalAssets = twin.protected_assets.filter(asset => plan.node_outcomes[asset.node_id] >= asset.threshold)
+  const reached = nodes.filter(node => node.arrival_h != null && time >= node.arrival_h).length
+  const nextArrival = nodes
+    .filter(node => node.arrival_h != null && node.arrival_h > time)
+    .sort((a, b) => a.arrival_h - b.arrival_h)[0]
+
+  return <section className="panel twin-panel" aria-label="Interactive catchment operations room">
+    <div className="twin-head">
+      <div><p className="eyebrow"><Icon name="spark" size={14}/> Interactive catchment twin</p><h2>See where pressure travels. Act before it arrives.</h2><p>Explore a directed network of sources, reaches and protected assets. This is an operational planning schematic—not a game score or hydraulic claim.</p></div>
+      <div className={`objective-state ${criticalAssets.length ? 'exposed' : 'secured'}`}><span>{criticalAssets.length ? 'ACTION REQUIRED' : 'OBJECTIVE SECURED'}</span><strong>{criticalAssets.length ? criticalAssets.length : twin.protected_assets.length}</strong><small>{criticalAssets.length ? 'protected assets still exposed' : 'protected assets below threshold'}</small></div>
+    </div>
+    <div className="mission-strip"><span><Icon name="pin" size={15}/><b>Objective</b>{twin.objective.title}</span><span><Icon name="clock" size={15}/><b>First asset arrival</b>{twin.objective.first_asset_arrival_h == null ? 'No routed pulse' : `+${twin.objective.first_asset_arrival_h}h`}</span><span><Icon name="alert" size={15}/><b>Pressure origin</b>{twin.pressure.label}</span></div>
+    <div className="twin-stage">
+      <div className="twin-world">
+        <div className="world-status"><span><i/> {twin.scenario} simulation</span><b>Hour {String(time).padStart(2, '0')}</b><span>{reached}/{nodes.filter(node => node.arrival_h != null).length} connected nodes reached</span></div>
+        <svg viewBox="0 0 820 380" role="group" aria-label="Directed catchment network planning schematic">
+          <defs>
+            <linearGradient id="world-water" x1="0" x2="1"><stop offset="0" stopColor="#9cdef5"/><stop offset="1" stopColor="#3aa6d2"/></linearGradient>
+            <filter id="node-glow"><feGaussianBlur stdDeviation="5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <path className="world-land" d="M15 70C130 18 212 45 286 83c78 39 156 2 235 2 102 0 157 50 284 17v240c-120 24-224-19-317 10-91 28-164 12-235-22-75-36-143-12-238 3z"/>
+          {twin.edges.map(edge => {
+            const source = byId[edge.source], target = byId[edge.target]
+            const midpoint = (source.x + target.x) / 2
+            const path = `M${source.x},${source.y} C${midpoint},${source.y} ${midpoint},${target.y} ${target.x},${target.y}`
+            const active = edge.activation_h != null && time >= edge.activation_h
+            return <g key={edge.id}><path className="flow-bed" d={path}/><path className={`flow-path ${active ? 'active' : ''}`} d={path}/><text className="flow-time" x={midpoint} y={(source.y + target.y) / 2 - 8}>+{edge.travel_time_h}h</text></g>
+          })}
+          {nodes.map(node => {
+            const value = nodeValue(node), band = nodeBand(value)
+            const arrived = node.arrival_h != null && time >= node.arrival_h
+            return <g key={node.id} role="button" tabIndex="0" aria-label={`${node.label}, stress ${Math.round(value)}, ${arrived ? 'pressure arrived' : 'not reached'}`} aria-pressed={selectedNode === node.id} className={`world-node ${node.role} ${band} ${arrived ? 'arrived' : ''} ${selectedNode === node.id ? 'selected' : ''}`} onClick={() => setSelectedNode(node.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedNode(node.id) } }}>
+              <circle className="node-halo" cx={node.x} cy={node.y} r="25"/>
+              <circle className="node-core" cx={node.x} cy={node.y} r="15" filter={arrived ? 'url(#node-glow)' : undefined}/>
+              <text className="node-score" x={node.x} y={node.y + 4}>{Math.round(value)}</text>
+              <text className="node-label" x={node.x} y={node.y + 43}>{node.label}</text>
+              <text className="node-role" x={node.x} y={node.y + 57}>{node.protected_asset ? 'PROTECTED ASSET' : node.role.toUpperCase()}</text>
+            </g>
+          })}
+        </svg>
+        <div className="world-clock"><button onClick={() => setPlaying(value => !value)} aria-label={playing ? 'Pause propagation' : 'Play propagation'}>{playing ? 'Ⅱ' : '▶'}</button><span>Now</span><input aria-label="Catchment propagation hour" type="range" min="0" max="72" step="1" value={time} onChange={event => { setTime(Number(event.target.value)); setPlaying(false) }}/><span>+72h</span><b>{nextArrival ? `Next: ${nextArrival.label} at +${nextArrival.arrival_h}h` : 'Full event window'}</b></div>
+      </div>
+      <aside className="node-inspector" aria-live="polite">
+        <span className={`node-state ${nodeBand(detailValue)}`}>{nodeBand(detailValue)}</span>
+        <p className="eyebrow">Selected network node</p><h3>{detail.label}</h3><p>{detail.protected_asset ? 'Protected asset monitored against the demonstration policy threshold.' : `Network role: ${detail.role.replaceAll('_', ' ')}.`}</p>
+        <div className="node-live-score"><strong>{Math.round(detailValue)}</strong><span>/100<small>stress at hour {time}</small></span></div>
+        <dl><div><dt>Pulse arrival</dt><dd>{detail.arrival_h == null ? 'Not routed' : `+${detail.arrival_h}h`}</dd></div><div><dt>Without action</dt><dd>{detail.peak_stress}</dd></div><div><dt>With this plan</dt><dd>{plan.node_outcomes[detail.id]}</dd></div><div><dt>Threshold</dt><dd>{detail.threshold}</dd></div></dl>
+        {plan.action_node === detail.id && <div className="deployed-action"><Icon name="check" size={15}/><span><b>Response deployed here</b>{plan.name} · acts in {plan.activation_h}h</span></div>}
+      </aside>
+    </div>
+    <div className="plan-console">
+      <div><small>Response plan</small><b>Switch the plan. Re-run the whole catchment.</b></div>
+      <div className="plan-options" role="group" aria-label="Catchment response plan">{twin.plans.map(item => <button key={item.key} aria-pressed={plan.key === item.key} className={plan.key === item.key ? 'active' : ''} onClick={() => { setPlanKey(item.key); setPlaying(false) }}><span>{item.key === twin.recommended_plan ? 'RECOMMENDED' : item.key === 'observe' ? 'BASELINE' : item.cost_band}</span><b>{item.name}</b><small>{item.reduction_pct ? `${item.reduction_pct}% scenario effect prior` : 'No direct ecological effect'}</small></button>)}</div>
+    </div>
+    <div className="twin-boundary"><Icon name="layers" size={15}/><p><b>{twin.model.name}:</b> {twin.model.boundary} Travel times, attenuation and protected-asset thresholds remain editable planning assumptions pending field calibration.</p></div>
+  </section>
 }
 
 function EvidenceLoop({ seg, observations, reviewQueue, graph, incident, refreshEvidence }) {

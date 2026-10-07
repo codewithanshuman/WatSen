@@ -30,6 +30,7 @@ export const api = {
     scenario,
     ...Object.fromEntries(Object.entries(weights || {}).map(([key, value]) => [`weight_${key}`, value])),
   }),
+  catchmentTwin: (code, scenario) => get(`/v1/segments/${code}/catchment-twin`, { scenario }),
   evidenceGraph: (code, scenario) => get(`/v1/segments/${code}/evidence-graph`, { scenario }),
   sufficiency: (code, scenario) => get(`/v1/segments/${code}/data-sufficiency`, { scenario }),
   oneHealth: (code, scenario) => get(`/v1/segments/${code}/one-health`, { scenario }),
