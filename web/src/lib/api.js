@@ -26,7 +26,10 @@ export const api = {
   contributor: (handle) => get(`/v1/contributors/${handle}`),
   hotspots: (scenario) => get('/v1/hotspots', { scenario }),
   failureChain: (code, scenario) => get(`/v1/segments/${code}/failure-chain`, { scenario }),
-  interventions: (code, scenario) => get(`/v1/segments/${code}/interventions`, { scenario }),
+  interventions: (code, scenario, weights = null) => get(`/v1/segments/${code}/interventions`, {
+    scenario,
+    ...Object.fromEntries(Object.entries(weights || {}).map(([key, value]) => [`weight_${key}`, value])),
+  }),
   evidenceGraph: (code, scenario) => get(`/v1/segments/${code}/evidence-graph`, { scenario }),
   sufficiency: (code, scenario) => get(`/v1/segments/${code}/data-sufficiency`, { scenario }),
   oneHealth: (code, scenario) => get(`/v1/segments/${code}/one-health`, { scenario }),

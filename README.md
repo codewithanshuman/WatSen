@@ -18,6 +18,7 @@ One Health communication in one auditable loop.
 - **Devpost submission copy:** [DEVPOST.md](DEVPOST.md)
 - **Forecast evidence:** [docs/FORECAST_EVALUATION.md](docs/FORECAST_EVALUATION.md)
 - **FHIR conformance evidence:** [docs/FHIR_CONFORMANCE.md](docs/FHIR_CONFORMANCE.md)
+- **Intervention decision method:** [docs/INTERVENTION_MCDA.md](docs/INTERVENTION_MCDA.md)
 
 ## Run the complete demo
 
@@ -91,7 +92,9 @@ the recent evidence stands on its own.
 - Reproducible chronological and leave-one-site-out evaluation against
   persistence and 24-hour seasonal baselines
 - Expandable, typed failure chain: observed, citizen, inferred and forecast
-- Six labelled counterfactual interventions with outcome comparison
+- Six labelled counterfactual responses ranked by an editable eight-criterion
+  MCDA, with contribution breakdowns, priority profiles and 21-case sensitivity
+  analysis
 - Adaptive Citizen Sampling and a community verification mission
 - Image upload, quality assessment and optional ONNX macroinvertebrate inference
 - Human review queue with confirm, correct and reject actions
@@ -199,6 +202,7 @@ instead of allowing `/health` to misreport the active backend.
 4. Show widening uncertainty and the adaptive citizen mission.
 5. Upload a photograph; explain that AI suggests and a human confirms.
 6. Confirm the observation and show the biological evidence window update.
-7. Compare the baseline with the recommended intervention simulation.
+7. Move an intervention priority, inspect the score breakdown and show how the
+   recommendation and sensitivity result respond.
 8. Open the measurable One Health bridge and cited brief.
 9. Finish with the OAH-profiled FHIR bundle, provenance and validation status.

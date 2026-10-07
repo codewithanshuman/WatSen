@@ -317,9 +317,27 @@ def get_failure_chain(code: str, scenario: str = SCENARIO_Q):
 
 
 @app.get("/v1/segments/{code}/interventions", tags=["resilience"])
-def get_interventions(code: str, scenario: str = SCENARIO_Q):
+def get_interventions(
+    code: str,
+    scenario: str = SCENARIO_Q,
+    weight_effectiveness: float | None = Query(None, ge=0, le=100),
+    weight_evidence: float | None = Query(None, ge=0, le=100),
+    weight_speed: float | None = Query(None, ge=0, le=100),
+    weight_feasibility: float | None = Query(None, ge=0, le=100),
+    weight_co_benefit: float | None = Query(None, ge=0, le=100),
+    weight_one_health: float | None = Query(None, ge=0, le=100),
+    weight_reversibility: float | None = Query(None, ge=0, le=100),
+    weight_cost: float | None = Query(None, ge=0, le=100),
+):
     _, summary, history, forecast = _decision_inputs(code, scenario)
-    return decision.intervention_search(summary, history, forecast)
+    requested = {
+        "effectiveness": weight_effectiveness, "evidence": weight_evidence,
+        "speed": weight_speed, "feasibility": weight_feasibility,
+        "co_benefit": weight_co_benefit, "one_health": weight_one_health,
+        "reversibility": weight_reversibility, "cost": weight_cost,
+    }
+    weights = {key: value for key, value in requested.items() if value is not None}
+    return decision.intervention_search(summary, history, forecast, weights or None)
 
 
 @app.get("/v1/segments/{code}/evidence-graph", tags=["resilience"])

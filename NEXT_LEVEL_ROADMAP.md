@@ -15,10 +15,13 @@ Completed locally on `next-level` (not pushed to the submitted deployment):
   forecast evaluation with persistence/seasonal baselines, event metrics,
   conformal coverage and machine-readable artifacts; and
 - corrected OAH profile selection plus official HL7 validator CI pinned to the
-  OAH source commit and validator checksum.
+  OAH source commit and validator checksum; and
+- transparent eight-criterion intervention MCDA with editable weights, five
+  priority profiles, score decomposition, direct-action guardrails, and
+  deterministic 21-case sensitivity analysis.
 
-Next implementation target: the transparent intervention MCDA and weight
-sensitivity view, followed by offline field capture.
+Next implementation target: the directed catchment graph and propagation view,
+followed by offline field capture.
 
 ## Product position
 

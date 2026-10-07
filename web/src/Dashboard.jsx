@@ -151,9 +151,25 @@ export default function Dashboard({ initialView = 'Network', onHome, onNavigate 
 
 function CommandCentre({ seg, segments, networkHealth, activeAlerts, emerging, predictedPeak, geojson, horizon, setHorizon, setActive, hotspots, history, forecast, failure, interventions, sufficiency, liveContext, onEvidence }) {
   const [chosen, setChosen] = useState(null)
-  useEffect(() => setChosen(null), [interventions?.segment_code, interventions?.scenario])
-  const recommendation = chosen || interventions?.recommended
-  const intervention = interventions?.interventions.find(x => x.key === recommendation)
+  const [decisionWeights, setDecisionWeights] = useState({})
+  const [weightProfile, setWeightProfile] = useState('balanced')
+  useEffect(() => {
+    setChosen(null)
+    setDecisionWeights(interventions?.decision_model?.weights || {})
+    setWeightProfile('balanced')
+  }, [interventions?.segment_code, interventions?.scenario])
+  const rankedInterventions = useMemo(
+    () => rankDecisionOptions(interventions?.interventions || [], decisionWeights),
+    [interventions, decisionWeights],
+  )
+  const liveRecommendation = rankedInterventions.find(x => x.decision_role !== 'verification')
+  const recommendation = chosen || liveRecommendation?.key || interventions?.recommended
+  const intervention = rankedInterventions.find(x => x.key === recommendation)
+  const decisionSensitivity = useMemo(
+    () => assessDecisionSensitivity(interventions?.interventions || [], decisionWeights, interventions?.decision_model?.weight_profiles || {}),
+    [interventions, decisionWeights],
+  )
+  const normalisedWeights = normaliseDecisionWeights(decisionWeights)
   const chart = useForecastChart(history, forecast, intervention)
   const accepted = segments.reduce((a, s) => a + (s.biological_evidence?.n_observations || 0), 0)
   const liveValues = Object.fromEntries((liveContext?.current || []).map(item => [item.key, item]))
@@ -230,11 +246,38 @@ function CommandCentre({ seg, segments, networkHealth, activeAlerts, emerging, p
     </div>
 
     <section className="panel intervention-lab" id="intervention-lab" tabIndex={-1}>
-      <PanelTitle title="Explore a better outcome" tag="Intervention lab"/>
-      <p className="panel-subtitle">Compare simulated responses. Select a card to update the trajectory above.</p>
+      <PanelTitle title="Choose with the trade-offs in view" tag="Transparent MCDA"/>
+      <p className="panel-subtitle">Adjust what matters, inspect every score and compare simulated responses. The selected card updates the trajectory above.</p>
       <div className="baseline-bar"><span><Icon name="layers" size={17}/>Without intervention</span><b>{interventions?.baseline.critical_stress_hours ?? '—'} <small>critical hours</small></b><b>{interventions?.baseline.peak_stress ?? '—'} <small>peak stress</small></b><b>{interventions?.baseline.minimum_do_mgl ?? '—'} <small>mg/L minimum DO</small></b></div>
-      <div className="intervention-grid">{interventions?.interventions.map(x => <button key={x.key} onClick={() => setChosen(x.key)} aria-pressed={recommendation === x.key} className={'intervention ' + (recommendation === x.key ? 'selected' : '')}><span className="intervention-top"><small>{x.key === interventions.recommended ? 'Suggested scenario' : 'Compare response'}</small><i>{recommendation === x.key && <Icon name="check" size={13}/>}</i></span><b>{x.name}</b><span className="intervention-result">{x.ecological_improvement_pct}%<small>estimated improvement</small></span><footer><span>{x.critical_stress_hours} critical hours</span><span>Peak {x.peak_stress}</span></footer></button>)}</div>
-      <p className="simulation-note">These estimates support comparison; local ecological conditions and field verification guide the decision.</p>
+      <div className="mcda-layout">
+        <div className="mcda-summary">
+          <span className="mcda-kicker"><Icon name="spark" size={15}/> Current recommendation</span>
+          <div className="mcda-score"><strong>{liveRecommendation?.decision_score?.toFixed(1) || '—'}</strong><span>/100<small>weighted score</small></span></div>
+          <h3>{liveRecommendation?.name || 'Calculating options'}</h3>
+          <p>Highest-scoring direct response under your active priorities.</p>
+          <div className="mcda-robust"><span><i style={{ width: `${decisionSensitivity.robustness_pct || 0}%` }}/></span><b>{decisionSensitivity.robustness_pct ?? '—'}% robust</b><small>{decisionSensitivity.interpretation || 'Testing priorities'}</small></div>
+          <dl><div><dt>Scenarios tested</dt><dd>{decisionSensitivity.scenarios_evaluated || '—'}</dd></div><div><dt>Runner-up margin</dt><dd>{decisionSensitivity.margin == null ? '—' : `${decisionSensitivity.margin.toFixed(1)} pts`}</dd></div></dl>
+        </div>
+        <div className="weight-lab">
+          <div className="weight-head"><div><small>Decision priorities</small><b>Move a weight. See the ranking respond.</b></div><button onClick={() => { setDecisionWeights(interventions?.decision_model?.weights || {}); setWeightProfile('balanced'); setChosen(null) }}>Reset</button></div>
+          <div className="weight-presets">{Object.entries(interventions?.decision_model?.weight_profiles || {}).map(([key, profile]) => <button key={key} className={weightProfile === key ? 'active' : ''} onClick={() => { setDecisionWeights(profile); setWeightProfile(key); setChosen(null) }}>{key.replaceAll('_', ' ')}</button>)}</div>
+          <div className="weight-controls">{interventions?.decision_model?.criteria.map(criterion => <label key={criterion.key}><span><b>{criterion.label}</b><output>{Math.round(normalisedWeights[criterion.key] || 0)}%</output></span><input type="range" min="0" max="50" step="1" value={decisionWeights[criterion.key] ?? criterion.weight} aria-label={`${criterion.label} weight`} onChange={event => { setDecisionWeights(current => ({ ...current, [criterion.key]: Number(event.target.value) })); setWeightProfile('custom'); setChosen(null) }}/><small>{criterion.question}</small></label>)}</div>
+        </div>
+      </div>
+      <div className="decision-method"><span><Icon name="layers" size={15}/>{interventions?.decision_model?.method || 'Loading decision method'}</span><a href={interventions?.decision_model?.source?.url} target="_blank" rel="noreferrer">OneAquaHealth DSS <Icon name="diagonal" size={13}/></a></div>
+      <div className="intervention-grid advanced">{rankedInterventions.map(x => <button key={x.key} onClick={() => setChosen(x.key)} aria-pressed={recommendation === x.key} className={'intervention ' + (recommendation === x.key ? 'selected' : '')}>
+        <span className="intervention-top"><small><em>#{x.rank}</em>{x.key === liveRecommendation?.key ? ' Recommended' : x.decision_role === 'verification' ? ' Verification action' : ' Response option'}</small><i>{recommendation === x.key && <Icon name="check" size={13}/>}</i></span>
+        <b>{x.name}</b>
+        <div className="option-score"><strong>{x.decision_score.toFixed(1)}</strong><span>MCDA<br/>score</span></div>
+        <div className="option-facts"><span><small>Effect</small><b>{x.ecological_improvement_pct}%</b></span><span><small>Cost</small><b>{x.cost_band}</b></span><span><small>Acts in</small><b>{x.time_to_effect_h}h</b></span></div>
+        <footer><span>{x.critical_stress_hours} critical hours</span><span>Peak {x.peak_stress}</span></footer>
+      </button>)}</div>
+      {intervention && <div className="decision-inspector">
+        <div className="inspector-head"><div><small>Selected option · rank #{intervention.rank}</small><h3>{intervention.name}</h3><p>{intervention.description}</p></div><strong>{intervention.decision_score.toFixed(1)}<small>/100</small></strong></div>
+        <div className="criterion-breakdown">{interventions?.decision_model?.criteria.map(criterion => <div key={criterion.key}><span><b>{criterion.label}</b><small>{intervention.criterion_scores[criterion.key].toFixed(0)} raw · {intervention.weighted_contributions[criterion.key].toFixed(1)} weighted</small></span><i><em style={{ width: `${intervention.criterion_scores[criterion.key]}%` }}/></i></div>)}</div>
+        <aside><div><small>Why it ranks here</small>{intervention.decision_explanation.strongest.map(item => <p key={item.criterion}><Icon name="check" size={14}/>{item.label} contributes {item.contribution.toFixed(1)} points.</p>)}</div><div><small>Main trade-offs</small><p><Icon name="alert" size={14}/>{intervention.decision_explanation.main_tradeoff.label} is the weakest scored criterion.</p>{intervention.constraints.slice(0, 2).map(item => <p key={item}><Icon name="layers" size={14}/>{item}</p>)}</div></aside>
+      </div>}
+      <p className="simulation-note"><b>Decision boundary:</b> these are counterfactual planning comparisons, not causal promises or procurement estimates. Expert judgement, permits and field verification remain required.</p>
     </section>
   </>
 }
@@ -416,6 +459,98 @@ function Metric({ label, value, note, tone = '', icon = 'wave', suffix }) { retu
 function PanelTitle({ title, tag }) { return <div className="panel-title"><h2>{title}</h2>{tag && <span>{tag}</span>}</div> }
 function Badge({ kind = 'observed' }) { return <span className={`badge ${kind}`}>{kind.replaceAll('_', ' ')}</span> }
 function FragmentPair({ label, value }) { return <><dt>{label}</dt><dd>{String(value)}</dd></> }
+
+const DECISION_LABELS = {
+  effectiveness: 'Expected ecological benefit', evidence: 'Evidence strength',
+  speed: 'Time to effect', feasibility: 'Site feasibility',
+  co_benefit: 'Ecological co-benefit', one_health: 'One Health relevance',
+  reversibility: 'Reversibility', cost: 'Resource efficiency',
+}
+
+function normaliseDecisionWeights(weights = {}) {
+  const entries = Object.entries(weights).map(([key, value]) => [key, Math.max(0, Number(value) || 0)])
+  const total = entries.reduce((sum, [, value]) => sum + value, 0)
+  if (!total) return {}
+  return Object.fromEntries(entries.map(([key, value]) => [key, value / total * 100]))
+}
+
+function scoreDecisionOption(option, weights) {
+  const normalised = normaliseDecisionWeights(weights)
+  if (!Object.keys(normalised).length || !option?.criterion_scores) return option
+  const contributions = Object.fromEntries(Object.entries(normalised).map(([key, weight]) => [
+    key,
+    Math.round(((option.criterion_scores[key] || 0) * weight / 100) * 100) / 100,
+  ]))
+  const strongest = Object.entries(contributions)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([criterion, contribution]) => ({
+      criterion,
+      label: criterionLabel(option, criterion),
+      contribution,
+    }))
+  const [tradeoff] = Object.entries(option.criterion_scores).sort((a, b) => a[1] - b[1])
+  return {
+    ...option,
+    decision_score: Math.round(Object.values(contributions).reduce((sum, value) => sum + value, 0) * 100) / 100,
+    weighted_contributions: contributions,
+    decision_explanation: {
+      strongest,
+      main_tradeoff: {
+        criterion: tradeoff[0],
+        label: criterionLabel(option, tradeoff[0]),
+        score: tradeoff[1],
+      },
+    },
+  }
+}
+
+function criterionLabel(option, key) {
+  if (DECISION_LABELS[key]) return DECISION_LABELS[key]
+  const existing = option?.decision_explanation
+  const match = existing?.strongest?.find(item => item.criterion === key)
+  if (match?.label) return match.label
+  if (existing?.main_tradeoff?.criterion === key) return existing.main_tradeoff.label
+  return key.replaceAll('_', ' ').replace(/\b\w/g, character => character.toUpperCase())
+}
+
+function rankDecisionOptions(options = [], weights = {}) {
+  if (!options.length) return []
+  const ranked = options.map(option => scoreDecisionOption(option, weights))
+    .sort((a, b) => b.decision_score - a.decision_score || b.ecological_improvement_pct - a.ecological_improvement_pct)
+  return ranked.map((option, index) => ({ ...option, rank: index + 1 }))
+}
+
+function primaryDecisionWinner(options, weights) {
+  const ranked = rankDecisionOptions(options, weights)
+  return ranked.find(option => option.decision_role !== 'verification')?.key || ranked[0]?.key
+}
+
+function assessDecisionSensitivity(options = [], weights = {}, profiles = {}) {
+  const baseline = normaliseDecisionWeights(weights)
+  if (!options.length || !Object.keys(baseline).length) return {}
+  const recommended = primaryDecisionWinner(options, baseline)
+  const scenarios = [{ label: 'Current weights', weights: baseline }]
+  Object.keys(baseline).forEach(key => {
+    ;[0.5, 1.5].forEach(multiplier => scenarios.push({
+      label: `${multiplier < 1 ? 'Lower' : 'Higher'} ${key}`,
+      weights: normaliseDecisionWeights({ ...baseline, [key]: baseline[key] * multiplier }),
+    }))
+  })
+  Object.entries(profiles).forEach(([key, profile]) => {
+    if (key !== 'balanced') scenarios.push({ label: key, weights: normaliseDecisionWeights(profile) })
+  })
+  const winners = scenarios.map(scenario => primaryDecisionWinner(options, scenario.weights))
+  const matching = winners.filter(key => key === recommended).length
+  const ranked = rankDecisionOptions(options, baseline).filter(option => option.decision_role !== 'verification')
+  const ratio = matching / scenarios.length
+  return {
+    scenarios_evaluated: scenarios.length,
+    robustness_pct: Math.round(ratio * 100),
+    margin: ranked.length > 1 ? ranked[0].decision_score - ranked[1].decision_score : null,
+    interpretation: ratio >= 0.75 ? 'Robust across priorities' : ratio < 0.55 ? 'Sensitive to priorities' : 'Moderately robust',
+  }
+}
 
 function useForecastChart(history, forecast, intervention) {
   return useMemo(() => {

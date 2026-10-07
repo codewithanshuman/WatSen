@@ -19,6 +19,10 @@ INTERVENTIONS = {
         "disruption": 2,
         "stress_reduction": 0.18,
         "do_gain": 2.0,
+        "cost_band": "medium", "cost_score": 68, "time_to_effect_h": 2,
+        "feasibility": 86, "reversibility": 96, "co_benefit": 42,
+        "one_health": 76, "evidence_strength": 82, "space_sensitivity": 2,
+        "constraints": ["Requires power and safe equipment access", "Temporary measure; does not remove the pollution source"],
     },
     "retention": {
         "name": "Stormwater retention",
@@ -26,6 +30,10 @@ INTERVENTIONS = {
         "disruption": 3,
         "stress_reduction": 0.22,
         "do_gain": 0.8,
+        "cost_band": "high", "cost_score": 42, "time_to_effect_h": 24,
+        "feasibility": 64, "reversibility": 70, "co_benefit": 94,
+        "one_health": 91, "evidence_strength": 80, "space_sensitivity": 18,
+        "constraints": ["Needs upstream storage or blue-green space", "Performance depends on storm volume and maintenance"],
     },
     "retention_aeration": {
         "name": "Retention + temporary aeration",
@@ -33,6 +41,10 @@ INTERVENTIONS = {
         "disruption": 4,
         "stress_reduction": 0.36,
         "do_gain": 2.4,
+        "cost_band": "very high", "cost_score": 28, "time_to_effect_h": 6,
+        "feasibility": 53, "reversibility": 66, "co_benefit": 83,
+        "one_health": 92, "evidence_strength": 76, "space_sensitivity": 18,
+        "constraints": ["Coordinates two operational teams", "Requires both suitable storage and powered access"],
     },
     "runoff_diversion": {
         "name": "Runoff diversion",
@@ -40,6 +52,10 @@ INTERVENTIONS = {
         "disruption": 4,
         "stress_reduction": 0.28,
         "do_gain": 1.0,
+        "cost_band": "high", "cost_score": 38, "time_to_effect_h": 12,
+        "feasibility": 57, "reversibility": 72, "co_benefit": 74,
+        "one_health": 82, "evidence_strength": 68, "space_sensitivity": 14,
+        "constraints": ["Needs a safe receiving or storage pathway", "Must avoid transferring risk downstream"],
     },
     "discharge_restriction": {
         "name": "Temporary discharge restriction",
@@ -47,6 +63,10 @@ INTERVENTIONS = {
         "disruption": 5,
         "stress_reduction": 0.30,
         "do_gain": 1.5,
+        "cost_band": "medium", "cost_score": 62, "time_to_effect_h": 4,
+        "feasibility": 48, "reversibility": 92, "co_benefit": 62,
+        "one_health": 87, "evidence_strength": 72, "space_sensitivity": 0,
+        "constraints": ["Requires a known controllable source and legal authority", "Potential operational burden for the discharger"],
     },
     "citizen_sampling": {
         "name": "Citizen sampling surge",
@@ -54,7 +74,34 @@ INTERVENTIONS = {
         "disruption": 1,
         "stress_reduction": 0.0,
         "do_gain": 0.0,
+        "cost_band": "low", "cost_score": 94, "time_to_effect_h": 3,
+        "feasibility": 92, "reversibility": 100, "co_benefit": 67,
+        "one_health": 65, "evidence_strength": 86, "space_sensitivity": 0,
+        "decision_role": "verification",
+        "constraints": ["Does not directly reduce ecological stress", "Needs training, review and safe site access"],
     },
+}
+
+CATALOGUE_URL = "https://www.oneaquahealth.eu/wp-content/uploads/2026/05/OAH_Catalogue-of-measures-1.pdf"
+DSS_URL = "https://www.oneaquahealth.eu/decision-support-system/"
+
+CRITERIA = {
+    "effectiveness": {"label": "Expected ecological benefit", "weight": 30, "question": "How much forecast stress could this scenario avoid?"},
+    "evidence": {"label": "Evidence strength", "weight": 15, "question": "How strong is the supporting evidence for this response type?"},
+    "speed": {"label": "Time to effect", "weight": 12, "question": "Can it act inside the forecast risk window?"},
+    "feasibility": {"label": "Site feasibility", "weight": 12, "question": "Can it be delivered under this reach and scenario context?"},
+    "co_benefit": {"label": "Ecological co-benefit", "weight": 10, "question": "Does it support broader habitat and resilience outcomes?"},
+    "one_health": {"label": "One Health relevance", "weight": 8, "question": "Could it benefit ecosystem, animal and human exposure pathways together?"},
+    "reversibility": {"label": "Reversibility", "weight": 6, "question": "Can the action be safely adjusted or stopped?"},
+    "cost": {"label": "Resource efficiency", "weight": 7, "question": "How favourable is its indicative resource requirement?"},
+}
+
+WEIGHT_PROFILES = {
+    "balanced": {key: spec["weight"] for key, spec in CRITERIA.items()},
+    "ecology_first": {"effectiveness": 42, "evidence": 13, "speed": 5, "feasibility": 8, "co_benefit": 17, "one_health": 8, "reversibility": 3, "cost": 4},
+    "rapid_response": {"effectiveness": 27, "evidence": 12, "speed": 30, "feasibility": 13, "co_benefit": 5, "one_health": 5, "reversibility": 5, "cost": 3},
+    "resource_constrained": {"effectiveness": 20, "evidence": 10, "speed": 8, "feasibility": 22, "co_benefit": 5, "one_health": 5, "reversibility": 5, "cost": 25},
+    "precautionary": {"effectiveness": 20, "evidence": 28, "speed": 8, "feasibility": 12, "co_benefit": 8, "one_health": 10, "reversibility": 10, "cost": 4},
 }
 
 
@@ -119,7 +166,114 @@ def _node(node_id: str, label: str, kind: str, evidence: str, confidence: float,
             "confidence": round(confidence, 2), "source": source}
 
 
-def intervention_search(summary: dict, history: dict, forecast: dict) -> dict:
+def _normalise_weights(weights: dict[str, float] | None = None) -> dict[str, float]:
+    raw = {key: float((weights or {}).get(key, spec["weight"])) for key, spec in CRITERIA.items()}
+    raw = {key: max(0.0, value) for key, value in raw.items()}
+    total = sum(raw.values())
+    if total <= 0:
+        raw = {key: float(spec["weight"]) for key, spec in CRITERIA.items()}
+        total = 100.0
+    return {key: value / total * 100 for key, value in raw.items()}
+
+
+def _criterion_scores(spec: dict, improvement: float, avoided: int, scenario: str,
+                      urban_index: float) -> dict[str, float]:
+    scenario_adjustment = {
+        "storm": {"retention": 9, "runoff_diversion": 8, "retention_aeration": 6},
+        "heatwave": {"aeration": 10, "retention_aeration": 7, "retention": -5},
+        "spill": {"discharge_restriction": 14, "aeration": 8, "retention_aeration": 5},
+    }.get(scenario, {})
+    key = spec["key"]
+    space_penalty = max(0.0, urban_index - 0.5) * 2 * spec["space_sensitivity"]
+    feasibility = spec["feasibility"] + scenario_adjustment.get(key, 0) - space_penalty
+    effectiveness = improvement * 2.5 + spec["do_gain"] * 5 + avoided
+    return {
+        "effectiveness": round(max(0, min(100, effectiveness)), 2),
+        "evidence": float(spec["evidence_strength"]),
+        "speed": round(max(0, 100 - min(spec["time_to_effect_h"], 72) / 72 * 100), 2),
+        "feasibility": round(max(0, min(100, feasibility)), 2),
+        "co_benefit": float(spec["co_benefit"]),
+        "one_health": float(spec["one_health"]),
+        "reversibility": float(spec["reversibility"]),
+        "cost": float(spec["cost_score"]),
+    }
+
+
+def _score_candidates(candidates: list[dict], weights: dict[str, float]) -> list[dict]:
+    ranked = []
+    for candidate in candidates:
+        contributions = {
+            key: candidate["criterion_scores"][key] * weights[key] / 100
+            for key in CRITERIA
+        }
+        ordered = sorted(contributions, key=contributions.get, reverse=True)
+        weakest = min(candidate["criterion_scores"], key=candidate["criterion_scores"].get)
+        ranked.append({
+            **candidate,
+            "decision_score": round(sum(contributions.values()), 2),
+            "weighted_contributions": {key: round(value, 2) for key, value in contributions.items()},
+            "decision_explanation": {
+                "strongest": [{"criterion": key, "label": CRITERIA[key]["label"],
+                               "contribution": round(contributions[key], 2)} for key in ordered[:2]],
+                "main_tradeoff": {"criterion": weakest, "label": CRITERIA[weakest]["label"],
+                                  "score": candidate["criterion_scores"][weakest]},
+            },
+        })
+    ranked.sort(key=lambda item: (item["decision_score"], item["ecological_improvement_pct"]), reverse=True)
+    for rank, candidate in enumerate(ranked, 1):
+        candidate["rank"] = rank
+        candidate["dominates"] = [
+            other["key"] for other in ranked
+            if other["key"] != candidate["key"]
+            and all(candidate["criterion_scores"][key] >= other["criterion_scores"][key] for key in CRITERIA)
+            and any(candidate["criterion_scores"][key] > other["criterion_scores"][key] for key in CRITERIA)
+        ]
+    return ranked
+
+
+def _winner(candidates: list[dict], weights: dict[str, float]) -> str:
+    ranked = _score_candidates(candidates, weights)
+    return next((item["key"] for item in ranked if item.get("decision_role", "intervention") == "intervention"), ranked[0]["key"])
+
+
+def _sensitivity(candidates: list[dict], weights: dict[str, float], winner: str) -> dict:
+    scenarios = [{"label": "Current weights", "weights": weights, "winner": winner}]
+    for key in CRITERIA:
+        for multiplier, direction in ((0.5, "Lower"), (1.5, "Higher")):
+            changed = {**weights, key: weights[key] * multiplier}
+            normalised = _normalise_weights(changed)
+            scenarios.append({
+                "label": f"{direction} {CRITERIA[key]['label'].lower()}",
+                "weights": normalised,
+                "winner": _winner(candidates, normalised),
+            })
+    for name, profile in WEIGHT_PROFILES.items():
+        if name == "balanced":
+            continue
+        normalised = _normalise_weights(profile)
+        scenarios.append({"label": name.replace("_", " ").title(), "weights": normalised,
+                          "winner": _winner(candidates, normalised)})
+    distribution: dict[str, int] = {}
+    for scenario in scenarios:
+        distribution[scenario["winner"]] = distribution.get(scenario["winner"], 0) + 1
+    matching = distribution.get(winner, 0)
+    return {
+        "scenarios_evaluated": len(scenarios),
+        "recommended_in_scenarios": matching,
+        "robustness_pct": round(matching / len(scenarios) * 100),
+        "winner_distribution": distribution,
+        "switches": [{"scenario": item["label"], "winner": item["winner"]}
+                     for item in scenarios if item["winner"] != winner],
+        "interpretation": (
+            "robust" if matching / len(scenarios) >= 0.75
+            else "weight-sensitive" if matching / len(scenarios) < 0.55
+            else "moderately robust"
+        ),
+    }
+
+
+def intervention_search(summary: dict, history: dict, forecast: dict,
+                        weights: dict[str, float] | None = None) -> dict:
     base_points = forecast["points"]
     base_min_do = min(history["do_mgl"][-24:])
     baseline = _metrics(base_points, base_min_do)
@@ -133,26 +287,62 @@ def intervention_search(summary: dict, history: dict, forecast: dict) -> dict:
         metrics = _metrics(transformed, base_min_do + spec["do_gain"])
         avoided = baseline["critical_stress_hours"] - metrics["critical_stress_hours"]
         improvement = round(100 * (baseline["peak_stress"] - metrics["peak_stress"]) / max(baseline["peak_stress"], 1))
-        results.append({
+        candidate = {
             "key": key, **spec, **metrics,
             "critical_failures_avoided": avoided,
             "ecological_improvement_pct": improvement,
             "confidence": "medium-high" if key in {"aeration", "retention"} else "medium",
             "points": transformed,
-        })
-    beneficial = [r for r in results if r["ecological_improvement_pct"] > 0]
-    recommended = min(
-        beneficial or results,
-        key=lambda r: (r["critical_stress_hours"], r["elevated_stress_hours"],
-                       r["disruption"], r["peak_stress"]),
+            "decision_role": spec.get("decision_role", "intervention"),
+            "evidence_basis": {
+                "title": "OneAquaHealth Catalogue of Measures",
+                "url": CATALOGUE_URL,
+                "dss_url": DSS_URL,
+                "scope": "Comparative planning prior; site-specific expert review remains required.",
+            },
+        }
+        candidate["criterion_scores"] = _criterion_scores(
+            candidate, improvement, avoided, summary.get("scenario", "none"),
+            float(summary.get("urban_index", 0.5)),
+        )
+        results.append(candidate)
+    decision_weights = _normalise_weights(weights)
+    ranked = _score_candidates(results, decision_weights)
+    recommended = next(
+        (item for item in ranked if item["decision_role"] == "intervention"), ranked[0]
     )
+    sensitivity = _sensitivity(results, decision_weights, recommended["key"])
     return {
         "segment_code": summary["code"],
         "scenario": summary.get("scenario", "none"),
         "label": "Simulation recommendation — not authoritative environmental advice",
         "baseline": baseline,
-        "interventions": results,
+        "decision_model": {
+            "name": "WatSen transparent weighted MCDA",
+            "version": "1.0.0",
+            "method": "Normalised additive utility with deterministic one-at-a-time and priority-profile sensitivity tests.",
+            "weights": {key: round(value, 2) for key, value in decision_weights.items()},
+            "criteria": [{"key": key, **spec, "direction": "higher-is-better"}
+                         for key, spec in CRITERIA.items()],
+            "weight_profiles": WEIGHT_PROFILES,
+            "assumptions": [
+                "Outcome values are labelled counterfactual simulations, not causal estimates.",
+                "Cost bands are indicative planning priors, not procurement estimates.",
+                "Site feasibility adjusts for scenario fit and urban space pressure.",
+                "The monitoring action can rank highly but is not eligible as the primary ecological response.",
+            ],
+            "source": {"title": "OneAquaHealth Decision Support System",
+                       "url": DSS_URL, "catalogue_url": CATALOGUE_URL},
+        },
+        "interventions": ranked,
         "recommended": recommended["key"],
+        "recommendation": {
+            "key": recommended["key"], "name": recommended["name"],
+            "score": recommended["decision_score"], "rank": recommended["rank"],
+            "reason": recommended["decision_explanation"],
+            "policy": "Highest MCDA score among direct ecological responses under the active weights.",
+        },
+        "sensitivity": sensitivity,
     }
 
 

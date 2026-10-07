@@ -155,9 +155,39 @@ def run(client) -> int:
         for suffix in ("failure-chain", "interventions", "evidence-graph", "data-sufficiency", "one-health", "incident"):
             d = get(f"/v1/segments/{code}/{suffix}?scenario=storm")
             _assert(isinstance(d, dict) and d, f"empty {suffix}")
+        decision = get(f"/v1/segments/{code}/interventions?scenario=storm")
+        weights = decision["decision_model"]["weights"]
+        ranked = decision["interventions"]
+        _assert(abs(sum(weights.values()) - 100) < 0.05, f"MCDA weights total {sum(weights.values())}")
+        _assert([item["rank"] for item in ranked] == list(range(1, len(ranked) + 1)),
+                "MCDA ranks are not continuous")
+        _assert(all(ranked[i]["decision_score"] >= ranked[i + 1]["decision_score"]
+                    for i in range(len(ranked) - 1)), "MCDA options are not score-sorted")
+        recommended = next(item for item in ranked if item["key"] == decision["recommended"])
+        _assert(recommended["decision_role"] == "intervention",
+                "a verification action was selected as the primary response")
+        _assert(abs(sum(recommended["weighted_contributions"].values())
+                    - recommended["decision_score"]) < 0.06,
+                "weighted contributions do not reproduce the decision score")
+        _assert(decision["sensitivity"]["scenarios_evaluated"] >= 20,
+                "too few deterministic sensitivity scenarios")
+        cost_query = (
+            f"/v1/segments/{code}/interventions?scenario=storm"
+            "&weight_effectiveness=0&weight_evidence=0&weight_speed=0"
+            "&weight_feasibility=0&weight_co_benefit=0&weight_one_health=0"
+            "&weight_reversibility=0&weight_cost=100"
+        )
+        cost_first = get(cost_query)
+        _assert(cost_first["decision_model"]["weights"]["cost"] == 100,
+                "custom MCDA weights were not applied")
+        _assert(cost_first["interventions"][0]["key"] == "citizen_sampling",
+                "resource-efficiency stress test did not alter the ranking")
+        _assert(cost_first["recommended"] != "citizen_sampling",
+                "verification action escaped the primary-response guardrail")
         hot = get("/v1/hotspots?scenario=storm")["hotspots"]
         _assert(len(hot) >= 3, "hotspot radar is empty")
-        return "failure chain, interventions, graph, mission, One Health and replay"
+        return (f"MCDA {len(ranked)} options / {decision['sensitivity']['scenarios_evaluated']} "
+                "sensitivity tests, graph, mission, One Health and replay")
     check("resilience loop", resilience)
 
     def brief():
