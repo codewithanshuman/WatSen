@@ -1,0 +1,17 @@
+{
+  "name": "WatSen Field Studio",
+  "short_name": "WatSen",
+  "description": "Offline-first freshwater field evidence and catchment decision support.",
+  "start_url": "/#/workspace/Evidence",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3faff",
+  "theme_color": "#eaf7ff",
+  "icons": [
+    { "src": "/assets/watsen-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Capture field evidence", "url": "/#/workspace/Evidence", "icons": [{ "src": "/assets/watsen-mark.svg", "sizes": "any", "type": "image/svg+xml" }] },
+    { "name": "Open catchment overview", "url": "/#/workspace/Network", "icons": [{ "src": "/assets/watsen-mark.svg", "sizes": "any", "type": "image/svg+xml" }] }
+  ]
+}

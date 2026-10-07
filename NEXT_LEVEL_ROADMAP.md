@@ -1,12 +1,12 @@
 # WatSen Next-Level Roadmap
 
 This roadmap turns WatSen from a polished hackathon prototype into a credible
-freshwater decision-support product. It is intentionally maintained on the
-local `next-level` branch while the submitted entry is being judged.
+freshwater decision-support product. Completed upgrades are promoted to the
+public demo only when their tests and boundary disclosures pass.
 
 ## Current implementation status
 
-Completed locally on `next-level` (not pushed to the submitted deployment):
+Completed:
 
 - live Open-Meteo context with provenance, cache policy, explicit unavailable
   state, and no silent synthetic fallback;
@@ -21,9 +21,13 @@ Completed locally on `next-level` (not pushed to the submitted deployment):
   deterministic 21-case sensitivity analysis; and
 - a seven-node directed catchment operations room with propagation playback,
   protected habitat/community assets, response-plan switching and an explicit
-  non-hydraulic model boundary.
+  non-hydraulic model boundary; and
+- an installable offline-first field PWA with a durable device queue, automatic
+  reconnect synchronization, on-device capture-quality guidance and auditable
+  observation-impact receipts.
 
-Next implementation target: offline field capture and resilient synchronization.
+Next implementation target: durable multi-user production storage, privacy and
+pilot evidence.
 
 ## Product position
 
@@ -146,14 +150,17 @@ mistaking a simulation for a promise.
 
 ## P2 — Build a real field workflow
 
-- Installable offline-first PWA with queued synchronization.
+- **Implemented:** installable offline-first PWA with IndexedDB queued
+  synchronization and automatic reconnect retry.
 - GPS/site-distance checks and explicit location-consent handling.
-- EXIF-aware capture, blur/exposure/obstruction quality checks, and duplicate
-  detection before upload.
+- **Partially implemented:** on-device resolution, exposure, contrast and
+  sharpness guidance before upload. EXIF consent, obstruction and duplicate
+  detection remain.
 - Family-level AI suggestions with top alternatives, confidence, visual
   evidence guidance, and mandatory human override.
 - Expert review SLA, audit trail, disagreement capture, and reviewer notes.
-- An impact receipt showing exactly what changed after an accepted observation.
+- **Implemented:** an impact receipt showing exactly what changed after an
+  accepted observation, or why no index change occurred.
 - Plain-language and multilingual field guidance; never reward upload volume.
 
 ## P2 — Add catchment intelligence instead of a decorative map

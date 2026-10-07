@@ -207,6 +207,9 @@ def submit_observation(payload: ObservationIn):
     if payload.segment_code not in store.segments:
         raise HTTPException(404, f"unknown segment {payload.segment_code}")
 
+    before_bio = store.biological_index(payload.segment_code)
+    before_stress = store.segment_summary(payload.segment_code)["stress"]
+
     sensors = None
     if payload.readings:
         sensors = store.nearest_sensor_readings(
@@ -233,11 +236,14 @@ def submit_observation(payload: ObservationIn):
         {**payload.model_dump(), "observed_at": payload.observed_at.isoformat(),
          "distance_to_stream_m": distance}, scored
     )
+    after_bio = store.biological_index(payload.segment_code)
+    after_stress = store.segment_summary(payload.segment_code)["stress"]
+    receipt = _impact_receipt(row, before_bio, after_bio, before_stress, after_stress)
     return {"observation": row, "validation": scored,
             "server_checks": {"distance_to_stream_m": distance,
                               "submissions_last_hour": submissions_1h,
                               "contributor_trust": trust},
-            "biological_index": store.biological_index(payload.segment_code)}
+            "biological_index": after_bio, "impact_receipt": receipt}
 
 
 @app.post("/v1/classify", tags=["observations"])
@@ -259,15 +265,65 @@ def review_queue():
 
 @app.post("/v1/observations/{observation_id}/review", tags=["observations"])
 def review_observation(observation_id: str, payload: ReviewIn):
+    store = get_store()
+    existing = store.observation(observation_id)
+    if existing is None:
+        raise HTTPException(404, "observation not found")
+    code = existing["segment_code"]
+    before_bio = store.biological_index(code)
+    before_stress = store.segment_summary(code)["stress"]
     try:
-        row = get_store().review_observation(
+        row = store.review_observation(
             observation_id, payload.action, payload.reviewer, payload.corrected_taxon)
     except KeyError as exc:
         raise HTTPException(404, "observation not found") from exc
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    return {"observation": row,
-            "biological_index": get_store().biological_index(row["segment_code"])}
+    after_bio = store.biological_index(code)
+    after_stress = store.segment_summary(code)["stress"]
+    return {"observation": row, "biological_index": after_bio,
+            "impact_receipt": _impact_receipt(
+                row, before_bio, after_bio, before_stress, after_stress)}
+
+
+def _impact_receipt(row: dict, before_bio: dict, after_bio: dict,
+                    before_stress: float, after_stress: float) -> dict:
+    accepted = row["state"] in {"auto_accepted", "expert_confirmed"}
+    changed = (
+        before_bio.get("aspt") != after_bio.get("aspt")
+        or before_bio.get("bmwp") != after_bio.get("bmwp")
+        or before_bio.get("n_observations") != after_bio.get("n_observations")
+    )
+    if row["state"] == "needs_review":
+        status = "pending_review"
+        message = "Queued for expert review. No ecological index changed yet."
+    elif row["state"] == "rejected":
+        status = "not_applied"
+        message = "The record was not applied to the ecological index."
+    elif changed:
+        status = "applied"
+        message = "Accepted evidence updated the 30-day biological evidence window."
+    else:
+        status = "accepted_no_index_change"
+        message = "Accepted, but this family was already represented in the evidence window."
+    return {
+        "receipt_id": f"impact-{row['id']}", "observation_id": row["id"],
+        "status": status, "message": message, "accepted": accepted,
+        "changes": {
+            "aspt": {"before": before_bio.get("aspt"), "after": after_bio.get("aspt"),
+                     "delta": round((after_bio.get("aspt") or 0) - (before_bio.get("aspt") or 0), 2)},
+            "bmwp": {"before": before_bio.get("bmwp"), "after": after_bio.get("bmwp"),
+                     "delta": (after_bio.get("bmwp") or 0) - (before_bio.get("bmwp") or 0)},
+            "accepted_observations": {
+                "before": before_bio.get("n_observations"), "after": after_bio.get("n_observations"),
+                "delta": (after_bio.get("n_observations") or 0) - (before_bio.get("n_observations") or 0)},
+            "stress": {"before": before_stress, "after": after_stress,
+                       "delta": round(after_stress - before_stress, 2)},
+        },
+        "trace": ["submission_received", "server_quality_checks", row["state"],
+                  "biological_window_recomputed" if accepted else "awaiting_or_not_applied"],
+        "boundary": "A receipt reports a deterministic evidence-window update, not causal ecological impact.",
+    }
 
 
 @app.get("/v1/contributors/{handle}", tags=["observations"])

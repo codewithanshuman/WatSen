@@ -4,6 +4,8 @@ import {
   Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { api, BAND } from './lib/api'
+import { assessCaptureQuality } from './lib/captureQuality'
+import { listFieldQueue, queueFieldObservation, removeFieldObservation, syncFieldQueue } from './lib/fieldQueue'
 import Icon from './components/Icon'
 
 const HOURS = 168
@@ -380,32 +382,78 @@ function CatchmentOperationsRoom({ twin }) {
 function EvidenceLoop({ seg, observations, reviewQueue, graph, incident, refreshEvidence }) {
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
+  const [captureQuality, setCaptureQuality] = useState(null)
+  const [qualityBusy, setQualityBusy] = useState(false)
   const [assessment, setAssessment] = useState(null)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [reviewing, setReviewing] = useState(null)
   const [reviewMessage, setReviewMessage] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [online, setOnline] = useState(() => navigator.onLine)
+  const [queued, setQueued] = useState([])
+  const [syncing, setSyncing] = useState(false)
+  const [receipt, setReceipt] = useState(null)
+  const syncLock = useRef(false)
   const pending = reviewQueue?.observations.filter(o => o.state === 'needs_review' && o.segment_code === seg?.code) || []
+
+  const refreshQueue = async () => setQueued(await listFieldQueue())
+  const syncNow = async () => {
+    if (syncLock.current || !navigator.onLine) return
+    syncLock.current = true; setSyncing(true); setMessage('Synchronizing queued field evidence…')
+    try {
+      const result = await syncFieldQueue(api)
+      await refreshQueue()
+      if (result.receipts.length) {
+        setReceipt(result.receipts[result.receipts.length - 1].impact_receipt)
+        setMessage(`${result.receipts.length} queued observation${result.receipts.length === 1 ? '' : 's'} synchronized and validated.`)
+        await refreshEvidence()
+      } else if (result.failed.length) setMessage(`Synchronization paused. ${result.failed.length} record${result.failed.length === 1 ? '' : 's'} will retry.`)
+      else setMessage('Field queue is already clear.')
+    } finally { syncLock.current = false; setSyncing(false) }
+  }
+  useEffect(() => {
+    refreshQueue().catch(() => {})
+    const handleOnline = () => { setOnline(true); syncNow().catch(() => {}) }
+    const handleOffline = () => setOnline(false)
+    window.addEventListener('online', handleOnline); window.addEventListener('offline', handleOffline)
+    return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline) }
+  }, [])
   useEffect(() => {
     if (!file) { setPreview(null); return }
     const url = URL.createObjectURL(file)
     setPreview(url)
     return () => URL.revokeObjectURL(url)
   }, [file])
-  const chooseFile = event => {
+  const chooseFile = async event => {
     const selected = event.target.files?.[0]
-    setAssessment(null); setSubmitted(false); setMessage('')
+    setAssessment(null); setSubmitted(false); setMessage(''); setCaptureQuality(null); setReceipt(null)
     if (!selected) { setFile(null); return }
     if (!['image/jpeg', 'image/png'].includes(selected.type) || selected.size > 12 * 1024 * 1024) {
       setFile(null); event.target.value = ''; setMessage('Choose a JPG or PNG image under 12 MB.'); return
     }
-    setFile(selected)
+    setFile(selected); setQualityBusy(true)
+    try { setCaptureQuality(await assessCaptureQuality(selected)) }
+    catch { setMessage('On-device guidance could not inspect this image. You can still queue it for review.') }
+    finally { setQualityBusy(false) }
+  }
+  const queueCapture = async () => {
+    if (!file || !seg || !captureQuality) return
+    setBusy(true)
+    try {
+      await queueFieldObservation({ file, segment: seg, captureQuality })
+      await refreshQueue(); setSubmitted(true); setAssessment(null)
+      setMessage(online ? 'Saved to the device queue. Sync now or keep it for later.' : 'Saved safely on this device. It will synchronize when connectivity returns.')
+    } catch (error) { setMessage(`Could not save on this device: ${error.message}`) }
+    finally { setBusy(false) }
   }
   const classify = async () => {
     if (!file) return
+    if (!navigator.onLine) { await queueCapture(); return }
     setBusy(true); setMessage('')
-    try { setAssessment(await api.classify(file)) } catch (e) { setMessage(e.message) } finally { setBusy(false) }
+    try { setAssessment(await api.classify(file)) }
+    catch (error) { setMessage(`${error.message}. The photo can still be saved to the offline queue.`) }
+    finally { setBusy(false) }
   }
   const submit = async () => {
     if (!assessment || !seg || submitted) return
@@ -415,32 +463,49 @@ function EvidenceLoop({ seg, observations, reviewQueue, graph, incident, refresh
         segment_code: seg.code, observed_at: new Date().toISOString(), lat: seg.lat, lon: seg.lon,
         contributor: 'demo-citizen', note: 'Image-assisted kick sample submitted from the evidence loop.',
         predicted_taxon: assessment.predicted_taxon, taxon_confidence: assessment.taxon_confidence,
-        n_photos: 1, model: assessment.model, image_quality: assessment.image_quality,
+        n_photos: 1, model: assessment.model,
+        image_quality: { ...assessment.image_quality, client_capture_score: captureQuality?.score },
       })
-      setMessage(`${result.validation.explanation} ASPT is now ${result.biological_index.aspt}.`)
+      setReceipt(result.impact_receipt)
+      setMessage(result.validation.explanation)
       setSubmitted(true)
       await refreshEvidence()
-    } catch (e) { setMessage(e.message) } finally { setBusy(false) }
+    } catch (error) { setMessage(error.message) } finally { setBusy(false) }
   }
+  const removeQueued = async id => { await removeFieldObservation(id); await refreshQueue() }
   const review = async (id, action) => {
     setReviewing(id); setReviewMessage('')
-    try { await api.review(id, { action, reviewer: 'demo-expert' }); await refreshEvidence(); setReviewMessage('Review saved. The evidence window is being updated.') }
-    catch (error) { setReviewMessage(error.message) }
+    try {
+      const result = await api.review(id, { action, reviewer: 'demo-expert' })
+      setReceipt(result.impact_receipt); await refreshEvidence()
+      setReviewMessage(result.impact_receipt.message)
+    } catch (error) { setReviewMessage(error.message) }
     finally { setReviewing(null) }
   }
   return <>
-    <section className="loop-hero"><p className="eyebrow">Closed evidence loop</p><h2>Citizen → AI suggestion → human review → BMWP / ASPT → stream stress</h2><p>Every accepted family changes the biological evidence window. Uncertain records are routed to people, not silently discarded.</p></section>
-    <div className="two-col wide-left">
-      <section className="panel upload-card"><PanelTitle title="New biological observation" tag="MULTIMODAL" /><div className="upload-zone">{preview ? <img className="upload-preview" src={preview} alt="Uploaded specimen preview" /> : <div className="upload-empty"><img src="/assets/field-camera.png" alt="Illustrated field camera" /><span><b>Choose a macroinvertebrate photo</b><small>JPG or PNG · up to 12 MB</small></span></div>}<input type="file" accept="image/jpeg,image/png" aria-label="Choose a specimen photo" disabled={busy} onChange={chooseFile} /></div><button className="primary" disabled={!file || busy} onClick={classify}>{busy ? 'Assessing…' : 'Run AI assessment'}</button>{assessment && <div className="assessment"><div><Badge kind="inferred" /><h3>{assessment.predicted_taxon}</h3><strong>{Math.round(assessment.taxon_confidence * 100)}%</strong></div><dl><dt>Ecological sensitivity</dt><dd>{assessment.ecological_sensitivity}</dd><dt>BMWP contribution</dt><dd>{assessment.bmwp_contribution}</dd><dt>Image quality</dt><dd>{assessment.image_quality.label} ({assessment.image_quality.score})</dd><dt>Decision</dt><dd>Human confirmation required</dd></dl><p>{assessment.disclaimer}</p><button className="primary" onClick={submit} disabled={busy || submitted}>{submitted ? 'Submitted for validation' : 'Submit for validation'}</button></div>}{message && <p className="feedback" role="status">{message}</p>}</section>
-      <section className="panel"><PanelTitle title="Biological state" tag={seg?.biological_evidence?.source?.toUpperCase()} /><div className="bio-score"><strong>{seg?.aspt}</strong><span>ASPT</span></div><dl className="facts"><dt>BMWP total</dt><dd>{seg?.bmwp}</dd><dt>Scoring families</dt><dd>{seg?.biological_evidence?.n_taxa}</dd><dt>Accepted observations</dt><dd>{seg?.biological_evidence?.n_observations}</dd><dt>Evidence confidence</dt><dd>{Math.round((seg?.biological_evidence?.confidence || 0) * 100)}%</dd></dl><div className="taxa-cloud">{seg?.biological_evidence?.families?.map(t => <span key={t}>{t}</span>)}</div></section>
+    <section className="loop-hero field-hero"><div><p className="eyebrow">Offline-first evidence loop</p><h2>Capture now. Validate when connected. See exactly what changed.</h2><p>Photos and site metadata remain on this device until synchronization. Queued records never enter the ecological index before server checks and, where needed, expert review.</p></div><div className={`field-connectivity ${online ? 'online' : 'offline'}`}><i/><span><b>{online ? 'Connected' : 'Offline field mode'}</b><small>{queued.length ? `${queued.length} capture${queued.length === 1 ? '' : 's'} waiting` : 'Device queue clear'}</small></span></div></section>
+    <div className="two-col wide-left field-grid">
+      <section className="panel upload-card"><PanelTitle title="New biological observation" tag="ON-DEVICE GUIDANCE" /><div className="upload-zone">{preview ? <img className="upload-preview" src={preview} alt="Uploaded specimen preview" /> : <div className="upload-empty"><img src="/assets/field-camera.png" alt="Illustrated field camera" /><span><b>Choose or capture a specimen photo</b><small>JPG or PNG · up to 12 MB · stored locally when offline</small></span></div>}<input type="file" accept="image/jpeg,image/png" capture="environment" aria-label="Choose a specimen photo" disabled={busy} onChange={chooseFile} /></div>
+        {qualityBusy && <div className="capture-loading"><span className="loading-orb"/><p>Checking light, focus and resolution on this device…</p></div>}
+        {captureQuality && <div className={`capture-guide ${captureQuality.label.replaceAll(' ', '-')}`}><header><span><small>Capture readiness</small><b>{captureQuality.label}</b></span><strong>{captureQuality.score}<small>/100</small></strong></header><div>{captureQuality.checks.map(check => <article key={check.key} className={check.pass ? 'pass' : 'improve'}><i>{check.pass ? '✓' : '!'}</i><span><b>{check.label}</b><small>{check.pass ? check.value : check.guidance}</small></span></article>)}</div><p>{captureQuality.boundary}</p></div>}
+        <div className="capture-actions"><button className="primary" disabled={!file || busy || qualityBusy} onClick={classify}>{busy ? 'Working…' : online ? 'Run server assessment' : 'Save offline'}</button><button disabled={!file || busy || qualityBusy || !captureQuality} onClick={queueCapture}>Save to device queue</button></div>
+        {assessment && <div className="assessment"><div><Badge kind="inferred" /><h3>{assessment.predicted_taxon}</h3><strong>{Math.round(assessment.taxon_confidence * 100)}%</strong></div><dl><dt>Ecological sensitivity</dt><dd>{assessment.ecological_sensitivity}</dd><dt>BMWP contribution</dt><dd>{assessment.bmwp_contribution}</dd><dt>Server image quality</dt><dd>{assessment.image_quality.label} ({assessment.image_quality.score})</dd><dt>Decision</dt><dd>Human confirmation available</dd></dl><p>{assessment.disclaimer}</p><button className="primary" onClick={submit} disabled={busy || submitted}>{submitted ? 'Submitted for validation' : 'Submit for validation'}</button></div>}{message && <p className="feedback" role="status">{message}</p>}</section>
+      <div className="field-side-stack">
+        <section className="panel queue-card"><PanelTitle title="Device synchronization queue" tag={online ? 'ONLINE' : 'OFFLINE READY'} /><div className="queue-summary"><span><Icon name="layers" size={20}/></span><div><strong>{queued.length}</strong><small>locally stored captures</small></div><button onClick={syncNow} disabled={!online || syncing || !queued.length}>{syncing ? 'Syncing…' : 'Sync now'}</button></div><p>Images stay in IndexedDB on this device. A successful server receipt removes each local copy.</p><div className="queue-list">{queued.slice(0, 5).map(item => <article key={item.id}><i className={item.state}/><span><b>{item.segment.name}</b><small>{fmtTime(item.created_at)} · {item.capture_quality.score}/100 capture</small>{item.last_error && <em>{item.last_error}</em>}</span><button aria-label={`Remove queued capture for ${item.segment.name}`} onClick={() => removeQueued(item.id)}>×</button></article>)}{!queued.length && <div className="queue-empty"><Icon name="check" size={18}/><span><b>Ready for the field</b><small>The offline queue is empty.</small></span></div>}</div></section>
+        <section className="panel biological-card"><PanelTitle title="Biological state" tag={seg?.biological_evidence?.source?.toUpperCase()} /><div className="bio-score"><strong>{seg?.aspt}</strong><span>ASPT</span></div><dl className="facts"><dt>BMWP total</dt><dd>{seg?.bmwp}</dd><dt>Scoring families</dt><dd>{seg?.biological_evidence?.n_taxa}</dd><dt>Accepted observations</dt><dd>{seg?.biological_evidence?.n_observations}</dd><dt>Evidence confidence</dt><dd>{Math.round((seg?.biological_evidence?.confidence || 0) * 100)}%</dd></dl><div className="taxa-cloud">{seg?.biological_evidence?.families?.map(t => <span key={t}>{t}</span>)}</div></section>
+      </div>
     </div>
-
+    {receipt && <ImpactReceipt receipt={receipt}/>}
     <section className="panel"><PanelTitle title="Expert review queue" tag={`${pending.length} FOR THIS REACH`} /><div className="review-grid">{pending.slice(0, 8).map(o => <article key={o.id}><Badge kind="citizen" /><h3>{o.predicted_taxon || 'Unclassified'}</h3><p>AI confidence {Math.round((o.taxon_confidence || 0) * 100)}% · quality {o.quality_score}</p><small>{o.explanation}</small><div><button disabled={reviewing !== null} onClick={() => review(o.id, 'confirm')}>Confirm</button><button disabled={reviewing !== null} onClick={() => review(o.id, 'reject')}>Reject</button></div></article>)}{!pending.length && <p className="empty">{reviewQueue ? 'No uncertain records are waiting for review in this reach.' : 'Loading the review queue…'}</p>}</div>{reviewMessage && <p className="feedback" role="status">{reviewMessage}</p>}</section>
-
     <section className="evidence-layout"><div className="panel"><PanelTitle title="Evidence graph" tag="TRACEABLE" /><div className="evidence-graph">{graph?.nodes.map(n => <article key={n.id} className={n.kind}><Badge kind={n.kind} /><b>{n.label}</b><small>{n.evidence}</small><em>{n.source}</em></article>)}</div></div><ContextCards observations={observations} segment={seg} /></section>
     <section className="panel"><PanelTitle title={`Incident replay · ${incident?.id || ''}`} tag="AUDIT TRAIL" /><div className="incident">{incident?.events.map((e, i) => <div key={`${e.at}-${i}`}><time>{fmtTime(e.at)}</time><i /><article><Badge kind={e.type} /><b>{e.title}</b></article></div>)}</div></section>
     <section className="panel"><PanelTitle title="Recent citizen evidence" tag={`${observations.length} RECORDS`} /><ObservationTable rows={observations.slice(0, 12)} /></section>
   </>
+}
+
+function ImpactReceipt({ receipt }) {
+  const changes = receipt.changes || {}
+  return <section className={`impact-receipt ${receipt.status}`} aria-live="polite"><header><div><span><Icon name="check" size={16}/> Observation impact receipt</span><h2>{receipt.message}</h2><p>{receipt.receipt_id}</p></div><strong>{receipt.status.replaceAll('_', ' ')}</strong></header><div className="receipt-changes">{Object.entries(changes).map(([key, change]) => <article key={key}><small>{key.replaceAll('_', ' ')}</small><span><b>{change.before ?? '—'}</b><Icon name="arrow" size={14}/><strong>{change.after ?? '—'}</strong></span><em>{change.delta > 0 ? '+' : ''}{change.delta}</em></article>)}</div><footer><span>{receipt.trace.map((step, index) => <i key={step}>{index + 1}. {step.replaceAll('_', ' ')}</i>)}</span><p>{receipt.boundary}</p></footer></section>
 }
 
 function OneHealthView({ oneHealth, brief }) {

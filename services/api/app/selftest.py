@@ -125,10 +125,20 @@ def run(client) -> int:
             "taxon_confidence": 0.93, "n_photos": 2,
         })
         _assert(r.status_code == 201, f"{r.status_code} {r.text[:160]}")
-        v = r.json()["validation"]
+        body = r.json()
+        v = body["validation"]
         _assert(v["state"] == "auto_accepted", f"clean submission was {v['state']}")
         _assert(v["explanation"], "no explanation returned")
-        return f"q={v['quality_score']}"
+        receipt = body["impact_receipt"]
+        _assert(receipt["observation_id"] == body["observation"]["id"],
+                "impact receipt is not linked to its observation")
+        _assert(receipt["status"] in ("applied", "accepted_no_index_change"),
+                f"unexpected accepted receipt status {receipt['status']}")
+        _assert(receipt["accepted"] is True, "accepted evidence receipt is not marked accepted")
+        _assert(set(receipt["changes"]) == {"aspt", "bmwp", "accepted_observations", "stress"},
+                "impact receipt change set drifted")
+        _assert("not causal" in receipt["boundary"], "receipt boundary is missing")
+        return f"q={v['quality_score']}, receipt={receipt['status']}"
     check("submit clean", submit_clean)
 
     def submit_bad():
@@ -140,10 +150,17 @@ def run(client) -> int:
             "readings": {"ph": 14.5}, "contributor_trust": 0.02,
         })
         _assert(r.status_code == 201, f"{r.status_code}")
-        v = r.json()["validation"]
+        body = r.json()
+        v = body["validation"]
         _assert(v["state"] != "auto_accepted", "obvious spam was auto-accepted")
         _assert(len(v["reasons"]) >= 3, "too few reasons for an obviously bad submission")
-        return f"{v['state']}, {len(v['reasons'])} reasons"
+        receipt = body["impact_receipt"]
+        _assert(receipt["status"] in ("pending_review", "not_applied"),
+                f"unsafe submission receipt was {receipt['status']}")
+        _assert(receipt["accepted"] is False, "unsafe evidence receipt is marked accepted")
+        _assert(receipt["changes"]["accepted_observations"]["delta"] == 0,
+                "unsafe evidence changed the accepted evidence window")
+        return f"{v['state']}, {len(v['reasons'])} reasons, receipt={receipt['status']}"
     check("submit spam", submit_bad)
 
     check("contributor", lambda: (

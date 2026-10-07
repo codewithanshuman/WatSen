@@ -20,6 +20,7 @@ One Health communication in one auditable loop.
 - **FHIR conformance evidence:** [docs/FHIR_CONFORMANCE.md](docs/FHIR_CONFORMANCE.md)
 - **Intervention decision method:** [docs/INTERVENTION_MCDA.md](docs/INTERVENTION_MCDA.md)
 - **Catchment twin boundary:** [docs/CATCHMENT_TWIN.md](docs/CATCHMENT_TWIN.md)
+- **Offline field workflow:** [docs/OFFLINE_FIELD_PWA.md](docs/OFFLINE_FIELD_PWA.md)
 
 ## Run the complete demo
 
@@ -99,7 +100,12 @@ the recent evidence stands on its own.
   MCDA, with contribution breakdowns, priority profiles and 21-case sensitivity
   analysis
 - Adaptive Citizen Sampling and a community verification mission
-- Image upload, quality assessment and optional ONNX macroinvertebrate inference
+- Installable field PWA with an IndexedDB-backed observation queue, automatic
+  retry after reconnection and deletion only after a successful server receipt
+- On-device resolution, exposure, contrast and sharpness capture guidance before
+  image upload, plus server quality assessment and optional ONNX inference
+- Observation-impact receipts showing accepted/review state and exact before →
+  after changes to ASPT, BMWP, accepted-record count and composite stress
 - Human review queue with confirm, correct and reject actions
 - Server-derived distance, submission velocity and contributor trust
 - Observation-driven BMWP/ASPT and stream stress
