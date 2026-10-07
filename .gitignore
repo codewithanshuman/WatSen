@@ -12,4 +12,5 @@ models/*.pkl
 models/*.pt
 models/*.onnx
 data/
+artifacts/
 .env*

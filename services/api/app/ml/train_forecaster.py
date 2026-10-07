@@ -39,6 +39,8 @@ from app.store import ASPT
 
 def frames_from_synthetic(days: int) -> tuple[list[dict], list[float]]:
     frames = [generate_series(s, hours=24 * days) for s in SEGMENTS]
+    for frame, segment in zip(frames, SEGMENTS):
+        frame["_segment_code"] = segment.code
     return frames, [ASPT.get(s.code) for s in SEGMENTS]
 
 
@@ -68,6 +70,7 @@ def frames_from_json(path: str) -> tuple[list[dict], list[float]]:
             print(f"  skipping {code}: only {len(wide)}h of usable data")
             continue
         frame = {"t": list(wide.index.to_pydatetime())}
+        frame["_segment_code"] = str(code)
         for var in ("do_mgl", "turbidity_ntu", "temp_c", "rain_mm", "nitrate_mgl"):
             frame[var] = wide[var].to_numpy()
         frame["ph"] = wide["ph"].to_numpy() if "ph" in wide else np.full(len(wide), np.nan)
@@ -110,7 +113,15 @@ def main() -> None:
     print(f"dataset {X.shape} -> {Y.shape}  ({meta})")
 
     if args.backend == "ridge":
-        model = RidgeForecaster().fit(Xtr, Ytr)
+        fit_x, fit_y, calibration_x, calibration_y = [], [], [], []
+        for site_x, site_y in zip(train_x, train_y):
+            calibration_cut = max(1, int(len(site_x) * .8))
+            fit_x.append(site_x[:calibration_cut]); fit_y.append(site_y[:calibration_cut])
+            calibration_x.append(site_x[calibration_cut:]); calibration_y.append(site_y[calibration_cut:])
+        model = RidgeForecaster().fit(
+            np.concatenate(fit_x), np.concatenate(fit_y),
+            X_cal=np.concatenate(calibration_x), Y_cal=np.concatenate(calibration_y),
+        )
     else:
         model = LSTMForecaster(n_features=X.shape[-1]).fit(Xtr, Ytr, epochs=args.epochs)
         model.predict = lambda Z: np.stack([  # batch predict for evaluate()

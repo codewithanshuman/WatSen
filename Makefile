@@ -1,4 +1,4 @@
-.PHONY: help dev api web db train test seed clean
+.PHONY: help dev api web db train test seed clean evaluate-forecaster fhir-fixture
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "};{printf "  \033[36m%-12s\033[0m %s\n",$$1,$$2}'
@@ -17,6 +17,12 @@ db: ## Apply the schema to a running postgres
 
 train-forecaster: ## Pre-train the stress forecaster (do this on day 2, not day 6)
 	cd services/api && python -m app.ml.train_forecaster --out ../../models/forecaster.pkl
+
+evaluate-forecaster: ## Reproduce chronological and unseen-site forecast benchmarks
+	cd services/api && python -m app.ml.evaluate_forecaster --days 180 --stride 12
+
+fhir-fixture: ## Export a deterministic OAH-profiled bundle for HL7 validation
+	cd services/api && python -m app.fhir_fixture
 
 train-classifier: ## Fine-tune the taxon classifier
 	cd services/api && python -m app.ml.classifier --data ../../data/macroinvertebrates

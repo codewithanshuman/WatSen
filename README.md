@@ -16,6 +16,8 @@ One Health communication in one auditable loop.
 - **Source:** [github.com/codewithanshuman/WatSen](https://github.com/codewithanshuman/WatSen)
 - **Live demo:** [watsen-nine.vercel.app](https://watsen-nine.vercel.app)
 - **Devpost submission copy:** [DEVPOST.md](DEVPOST.md)
+- **Forecast evidence:** [docs/FORECAST_EVALUATION.md](docs/FORECAST_EVALUATION.md)
+- **FHIR conformance evidence:** [docs/FHIR_CONFORMANCE.md](docs/FHIR_CONFORMANCE.md)
 
 ## Run the complete demo
 
@@ -86,6 +88,8 @@ the recent evidence stands on its own.
 - Interactive predictive resilience map with a now-to-72-hour timeline
 - Regional risk radar and emerging-hotspot detection
 - 72-hour direct multi-horizon Ridge forecast with held-out residual calibration
+- Reproducible chronological and leave-one-site-out evaluation against
+  persistence and 24-hour seasonal baselines
 - Expandable, typed failure chain: observed, citizen, inferred and forecast
 - Six labelled counterfactual interventions with outcome comparison
 - Adaptive Citizen Sampling and a community verification mission
@@ -98,8 +102,8 @@ the recent evidence stands on its own.
 - Evidence-grounded One Health brief with source provenance
 - FHIR R4 transaction Bundle declaring draft OneAquaHealth Location,
   component Observation and Specimen profiles, plus Provenance
-- Local FHIR/OAH structural preflight that is clearly distinguished from the
-  authoritative HL7 validator
+- Local FHIR/OAH structural preflight plus CI validation with the official HL7
+  validator against a commit-pinned OneAquaHealth source build
 - Model card and honest synthetic-development limitations
 - Deterministic, fixed-date demo data via `DEMO_END` and `DEMO_SEED`
 
@@ -158,15 +162,21 @@ GET  /v1/segments/{code}/fhir/validate
 ```bash
 cd services/api
 python -m app.selftest
+python -m app.ml.evaluate_forecaster --days 180 --stride 12
 
 cd ../../web
 npm run build
 ```
 
 The endpoint suite covers the original API plus the closed resilience loop and
-FHIR preflight. For authoritative FHIR validation, run the official HL7
-validator CLI against the current OneAquaHealth CI package; the IG is still a
-draft and changes over time.
+FHIR preflight. The generated forecast report is committed at
+[`docs/FORECAST_EVALUATION.md`](docs/FORECAST_EVALUATION.md), with machine-readable
+metrics in [`reports/forecast_evaluation.json`](reports/forecast_evaluation.json).
+CI also exports a reproducible Bundle and runs the official HL7 validator
+against FHIR R4 and a commit-pinned build of the draft OneAquaHealth profiles.
+The CI gate is network-independent: it enforces structural/profile errors and
+uses the bundled OAH definitions, while external terminology-service messages
+remain reported as non-blocking warnings.
 
 ## Optional infrastructure
 

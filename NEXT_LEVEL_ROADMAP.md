@@ -4,6 +4,22 @@ This roadmap turns WatSen from a polished hackathon prototype into a credible
 freshwater decision-support product. It is intentionally maintained on the
 local `next-level` branch while the submitted entry is being judged.
 
+## Current implementation status
+
+Completed locally on `next-level` (not pushed to the submitted deployment):
+
+- live Open-Meteo context with provenance, cache policy, explicit unavailable
+  state, and no silent synthetic fallback;
+- a responsive live-evidence panel in the workspace;
+- reproducible chronological, leave-one-reach-out and leave-one-city-out
+  forecast evaluation with persistence/seasonal baselines, event metrics,
+  conformal coverage and machine-readable artifacts; and
+- corrected OAH profile selection plus official HL7 validator CI pinned to the
+  OAH source commit and validator checksum.
+
+Next implementation target: the transparent intervention MCDA and weight
+sensitivity view, followed by offline field capture.
+
 ## Product position
 
 **Primary track:** Track 6 — Resilience Informatics

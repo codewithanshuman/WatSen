@@ -6,7 +6,9 @@ or regulatory advice.
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from statistics import mean
 
 
@@ -217,12 +219,36 @@ def one_health_bridge(summary: dict, history: dict, observations: list[dict]) ->
 
 
 def model_card() -> dict:
+    packaged_report = Path(__file__).resolve().parents[1] / "evidence" / "forecast_evaluation.json"
+    repository_report = Path(__file__).resolve().parents[4] / "reports" / "forecast_evaluation.json"
+    report_path = packaged_report if packaged_report.exists() else repository_report
+    evaluation = None
+    if report_path.exists():
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            chronological = report["chronological_holdout"]
+            evaluation = {
+                "evidence_status": report["dataset"]["source_kind"],
+                "generated_at": report["generated_at"],
+                "n_test_windows": chronological["n_windows"],
+                **chronological["overall"],
+                "horizon_bands": chronological["horizon_bands"],
+                "event_detection": chronological["events"],
+                "unseen_site_macro_average": report["leave_one_site_out"]["macro_average"],
+                "unseen_city_macro_average": report["leave_one_city_out"]["macro_average"],
+            }
+        except (KeyError, TypeError, ValueError, OSError):
+            evaluation = None
     return {
         "name": "WatForecast Ridge v3",
         "purpose": "Short-range stream stress forecasting for decision support.",
         "inputs": ["dissolved oxygen", "water temperature", "turbidity", "nitrate", "precipitation", "ASPT", "time features"],
         "training_set": "Mechanistically inspired synthetic development data across six European urban reaches.",
-        "evaluation": {"overall_mae": 2.757, "skill_0_24h": 0.421, "skill_24_48h": 0.237, "skill_48_72h": 0.227, "interval_coverage": 0.696},
-        "known_limitations": ["Not validated for regulatory decision-making", "Synthetic-development data", "Interval coverage is below the nominal 80% and is labelled accordingly", "Accuracy varies with sensor availability"],
+        "evaluation": evaluation or {
+            "evidence_status": "unavailable",
+            "message": "Run `make evaluate-forecaster` to generate the versioned evaluation artifact.",
+        },
+        "evaluation_protocol": "Per-site chronological holdout plus leave-one-site-out generalization; persistence and 24-hour seasonal baselines.",
+        "known_limitations": ["Not validated for regulatory decision-making", "Synthetic-development data", "Rare severe events may be non-evaluable", "Accuracy varies with sensor availability"],
         "intended_use": "Research, citizen-science coordination and scenario exploration.",
     }

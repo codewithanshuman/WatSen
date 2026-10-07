@@ -173,14 +173,37 @@ def run(client) -> int:
         return f"{d['generator']}, {len(ids)} evidence items, {len(cited)} cited"
     check("brief grounding", brief)
 
+    def model_evidence():
+        d = get("/v1/models/watforecast")
+        evaluation = d["evaluation"]
+        _assert(evaluation.get("evidence_status") == "synthetic-development", str(evaluation))
+        _assert(evaluation.get("n_test_windows", 0) > 0, "evaluation artifact was not loaded")
+        _assert("unseen_site_macro_average" in evaluation, "missing unseen-site evaluation")
+        _assert("unseen_city_macro_average" in evaluation, "missing unseen-city evaluation")
+        return (f"{evaluation['n_test_windows']} test windows, "
+                f"MAE={evaluation['mae']}, coverage={evaluation['interval_80_coverage']}")
+    check("forecast evidence", model_evidence)
+
     def fhir():
         d = get(f"/v1/segments/{code}/fhir?hours=6")
         _assert(d["resourceType"] == "Bundle", "not a Bundle")
         _assert(d["type"] == "transaction", "not a transaction bundle")
         kinds = {e["resource"]["resourceType"] for e in d["entry"]}
-        _assert("Location" in kinds and "Observation" in kinds, f"missing resources: {kinds}")
+        _assert({"Location", "Observation", "PractitionerRole"} <= kinds,
+                f"missing resources: {kinds}")
+        refs = {e["fullUrl"] for e in d["entry"]}
         for e in d["entry"]:
             _assert("request" in e, "transaction entry without a request")
+            resource = e["resource"]
+            if resource["resourceType"] == "Observation":
+                _assert(resource["meta"]["profile"] == [
+                    "http://hl7.eu/fhir/ig/oah/StructureDefinition/observation-indicators-oah"
+                ], "wrong OAH observation profile")
+                _assert(all(p["reference"] in refs for p in resource["performer"]),
+                        "unresolved observation performer")
+            if resource["resourceType"] == "Specimen":
+                _assert(resource["collection"]["collector"]["reference"] in refs,
+                        "unresolved specimen collector")
         return f"{len(d['entry'])} entries, {sorted(kinds)}"
     check("fhir bundle", fhir)
 

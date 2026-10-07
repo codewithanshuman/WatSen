@@ -1,0 +1,113 @@
+name: Evidence and conformance
+
+on:
+  push:
+    branches: [main, next-level]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: services/api/requirements.txt
+      - run: python -m pip install -r services/api/requirements.txt
+      - name: API contract and evidence-loop tests
+        working-directory: services/api
+        run: python -m app.selftest
+      - name: Reproduce forecast evaluation
+        working-directory: services/api
+        run: python -m app.ml.evaluate_forecaster --days 180 --stride 12 --json-out ../../artifacts/forecast_evaluation.json --markdown-out ../../artifacts/FORECAST_EVALUATION.md
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --global pnpm@10
+      - name: Install web dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: Build production web app
+        working-directory: web
+        run: pnpm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forecast-evidence
+          path: artifacts/
+
+  fhir-conformance:
+    runs-on: ubuntu-latest
+    env:
+      OAH_COMMIT: b907cf0869b59d82d9138b3d147fca66f333d911
+      SUSHI_VERSION: 3.20.1
+      VALIDATOR_VERSION: 7.0.0
+      VALIDATOR_SHA256: 0ec7285b0f23999c25979533c6e9105f5f01087889fcc113ac1dfc65560bcc69
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: services/api/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Cache FHIR packages and validator
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.fhir/packages
+            ~/.cache/watsen-fhir
+          key: fhir-${{ runner.os }}-${{ env.VALIDATOR_VERSION }}-${{ env.OAH_COMMIT }}
+      - run: python -m pip install -r services/api/requirements.txt
+      - name: Export reproducible WatSen bundle
+        working-directory: services/api
+        run: python -m app.fhir_fixture
+      - name: Build pinned OneAquaHealth profile definitions
+        shell: bash
+        run: |
+          git clone https://github.com/hl7-eu/oah.git "$RUNNER_TEMP/oah"
+          git -C "$RUNNER_TEMP/oah" checkout "$OAH_COMMIT"
+          npm install --global "fsh-sushi@$SUSHI_VERSION"
+          sushi "$RUNNER_TEMP/oah" --out "$RUNNER_TEMP/oah-build"
+          mkdir -p "$RUNNER_TEMP/oah-minimal"
+          cp "$RUNNER_TEMP/oah-build/fsh-generated/resources"/ValueSet-*.json "$RUNNER_TEMP/oah-minimal/"
+          cp "$RUNNER_TEMP/oah-build/fsh-generated/resources/CodeSystem-temporarySystem-oah-eu.json" "$RUNNER_TEMP/oah-minimal/"
+          cp "$RUNNER_TEMP/oah-build/fsh-generated/resources/StructureDefinition-location-oah.json" "$RUNNER_TEMP/oah-minimal/"
+          cp "$RUNNER_TEMP/oah-build/fsh-generated/resources/StructureDefinition-observation-indicators-oah.json" "$RUNNER_TEMP/oah-minimal/"
+          cp "$RUNNER_TEMP/oah-build/fsh-generated/resources/StructureDefinition-specimen-oah.json" "$RUNNER_TEMP/oah-minimal/"
+      - name: Download and verify the official HL7 validator
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.cache/watsen-fhir"
+          jar="$HOME/.cache/watsen-fhir/validator_cli-$VALIDATOR_VERSION.jar"
+          if [ ! -f "$jar" ]; then
+            curl --fail --location --retry 3 --output "$jar" "https://github.com/hapifhir/org.hl7.fhir.core/releases/download/$VALIDATOR_VERSION/validator_cli.jar"
+          fi
+          echo "$VALIDATOR_SHA256  $jar" | sha256sum --check
+      - name: Validate against FHIR R4 and pinned OAH profiles
+        shell: bash
+        run: |
+          java -Dfile.encoding=UTF-8 -jar "$HOME/.cache/watsen-fhir/validator_cli-$VALIDATOR_VERSION.jar" \
+            artifacts/watsen-oah-bundle.json \
+            -version 4.0.1 \
+            -ig "$RUNNER_TEMP/oah-minimal" \
+            -tx n/a \
+            -output artifacts/fhir-validation.json
+          cd services/api
+          python -m app.fhir_validation_gate ../../artifacts/fhir-validation.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fhir-conformance
+          path: artifacts/

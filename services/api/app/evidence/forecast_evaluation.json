@@ -1,0 +1,922 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-10-07T14:26:34+00:00",
+  "model": {
+    "name": "WatForecast Ridge",
+    "version": "forecaster-0.3.0-ridge-conformal"
+  },
+  "dataset": {
+    "label": "Deterministic mechanistic synthetic development dataset",
+    "source_kind": "synthetic-development",
+    "days": 180,
+    "stride": 12,
+    "sites": [
+      {
+        "code": "PT-CBR-01",
+        "city": "Coimbra"
+      },
+      {
+        "code": "PT-CBR-02",
+        "city": "Coimbra"
+      },
+      {
+        "code": "IT-BLG-01",
+        "city": "Bologna"
+      },
+      {
+        "code": "RO-BUC-01",
+        "city": "Bucharest"
+      },
+      {
+        "code": "ES-VLC-01",
+        "city": "Valencia"
+      },
+      {
+        "code": "NL-UTR-01",
+        "city": "Utrecht"
+      }
+    ]
+  },
+  "protocol_notes": [
+    "All splits are made at complete forecast-window boundaries.",
+    "Conformal residuals are never estimated from an evaluation partition.",
+    "Overlapping windows are retained and explicitly reported through stride.",
+    "Synthetic results are not evidence of field performance."
+  ],
+  "environment": {
+    "python": "3.11.9",
+    "numpy": "2.2.1",
+    "scikit_learn": "1.6.0"
+  },
+  "chronological_holdout": {
+    "protocol": "Per-site chronological 80/20 test split; the newest 20% of each site's training partition is reserved for conformal calibration.",
+    "n_training_windows": 1632,
+    "n_windows": 408,
+    "overall": {
+      "mae": 2.7841,
+      "rmse": 4.4157,
+      "persistence_mae": 3.6006,
+      "seasonal_24h_mae": 4.2346,
+      "interval_80_coverage": 0.8145,
+      "interval_mean_width": 8.1024,
+      "interval_80_coverage_error": 0.0145,
+      "skill_vs_persistence": 0.2268,
+      "skill_vs_seasonal_24h": 0.3425
+    },
+    "horizon_bands": {
+      "0-24h": {
+        "mae": 1.1997,
+        "rmse": 2.0815,
+        "persistence_mae": 2.0009,
+        "seasonal_24h_mae": 3.4585,
+        "skill_vs_persistence": 0.4004,
+        "skill_vs_seasonal_24h": 0.6531
+      },
+      "24-48h": {
+        "mae": 3.3904,
+        "rmse": 4.9596,
+        "persistence_mae": 4.1663,
+        "seasonal_24h_mae": 4.5825,
+        "skill_vs_persistence": 0.1862,
+        "skill_vs_seasonal_24h": 0.2601
+      },
+      "48-72h": {
+        "mae": 3.762,
+        "rmse": 5.4374,
+        "persistence_mae": 4.6345,
+        "seasonal_24h_mae": 4.663,
+        "skill_vs_persistence": 0.1882,
+        "skill_vs_seasonal_24h": 0.1932
+      }
+    },
+    "events": {
+      "50": {
+        "threshold": 50,
+        "status": "evaluated",
+        "window_prevalence": 0.0098,
+        "point_prevalence": 0.0032,
+        "window_precision": 1.0,
+        "window_recall": 1.0,
+        "point_brier_score": 0.0008,
+        "true_positive_windows": 4,
+        "false_positive_windows": 0,
+        "false_negative_windows": 0,
+        "median_notice_hours": 1.0
+      },
+      "75": {
+        "threshold": 75,
+        "status": "not_evaluable_no_positive_windows",
+        "window_prevalence": 0.0,
+        "point_prevalence": 0.0,
+        "window_precision": null,
+        "window_recall": null,
+        "point_brier_score": 0.0,
+        "true_positive_windows": 0,
+        "false_positive_windows": 0,
+        "false_negative_windows": 0,
+        "median_notice_hours": null
+      }
+    }
+  },
+  "leave_one_site_out": {
+    "protocol": "Train on every other reach and evaluate on one entirely unseen reach.",
+    "macro_average": {
+      "mae": 2.5616,
+      "mae_std": 0.3281,
+      "skill_vs_persistence": 0.2715
+    },
+    "folds": [
+      {
+        "code": "PT-CBR-01",
+        "city": "Coimbra",
+        "n_windows": 340,
+        "overall": {
+          "mae": 2.9334,
+          "rmse": 4.67,
+          "persistence_mae": 4.2749,
+          "seasonal_24h_mae": 5.0046,
+          "interval_80_coverage": 0.7267,
+          "interval_mean_width": 8.4107,
+          "interval_80_coverage_error": 0.0733,
+          "skill_vs_persistence": 0.3138,
+          "skill_vs_seasonal_24h": 0.4139
+        },
+        "horizon_bands": {
+          "0-24h": {
+            "mae": 1.3296,
+            "rmse": 2.3947,
+            "persistence_mae": 2.3518,
+            "seasonal_24h_mae": 4.0188,
+            "skill_vs_persistence": 0.4346,
+            "skill_vs_seasonal_24h": 0.6691
+          },
+          "24-48h": {
+            "mae": 3.57,
+            "rmse": 5.2988,
+            "persistence_mae": 4.8918,
+            "seasonal_24h_mae": 5.4206,
+            "skill_vs_persistence": 0.2702,
+            "skill_vs_seasonal_24h": 0.3414
+          },
+          "48-72h": {
+            "mae": 3.9007,
+            "rmse": 5.6228,
+            "persistence_mae": 5.581,
+            "seasonal_24h_mae": 5.5744,
+            "skill_vs_persistence": 0.3011,
+            "skill_vs_seasonal_24h": 0.3002
+          }
+        },
+        "events": {
+          "50": {
+            "threshold": 50,
+            "status": "evaluated",
+            "window_prevalence": 0.0706,
+            "point_prevalence": 0.0164,
+            "window_precision": 1.0,
+            "window_recall": 0.2917,
+            "point_brier_score": 0.0123,
+            "true_positive_windows": 7,
+            "false_positive_windows": 0,
+            "false_negative_windows": 17,
+            "median_notice_hours": 1.0
+          },
+          "75": {
+            "threshold": 75,
+            "status": "not_evaluable_no_positive_windows",
+            "window_prevalence": 0.0,
+            "point_prevalence": 0.0,
+            "window_precision": null,
+            "window_recall": null,
+            "point_brier_score": 0.0,
+            "true_positive_windows": 0,
+            "false_positive_windows": 0,
+            "false_negative_windows": 0,
+            "median_notice_hours": null
+          }
+        }
+      },
+      {
+        "code": "PT-CBR-02",
+        "city": "Coimbra",
+        "n_windows": 340,
+        "overall": {
+          "mae": 2.3169,
+          "rmse": 3.6057,
+          "persistence_mae": 3.2881,
+          "seasonal_24h_mae": 3.8204,
+          "interval_80_coverage": 0.8335,
+          "interval_mean_width": 7.9191,
+          "interval_80_coverage_error": 0.0335,
+          "skill_vs_persistence": 0.2954,
+          "skill_vs_seasonal_24h": 0.3935
+        },
+        "horizon_bands": {
+          "0-24h": {
+            "mae": 1.0671,
+            "rmse": 1.8167,
+            "persistence_mae": 1.9413,
+            "seasonal_24h_mae": 3.2735,
+            "skill_vs_persistence": 0.4503,
+            "skill_vs_seasonal_24h": 0.674
+          },
+          "24-48h": {
+            "mae": 2.7854,
+            "rmse": 4.038,
+            "persistence_mae": 3.8376,
+            "seasonal_24h_mae": 4.0528,
+            "skill_vs_persistence": 0.2742,
+            "skill_vs_seasonal_24h": 0.3127
+          },
+          "48-72h": {
+            "mae": 3.0981,
+            "rmse": 4.4043,
+            "persistence_mae": 4.0855,
+            "seasonal_24h_mae": 4.1347,
+            "skill_vs_persistence": 0.2417,
+            "skill_vs_seasonal_24h": 0.2507
+          }
+        },
+        "events": {
+          "50": {
+            "threshold": 50,
+            "status": "not_evaluable_no_positive_windows",
+            "window_prevalence": 0.0,
+            "point_prevalence": 0.0,
+            "window_precision": null,
+            "window_recall": null,
+            "point_brier_score": 0.0,
+            "true_positive_windows": 0,
+            "false_positive_windows": 0,
+            "false_negative_windows": 0,
+            "median_notice_hours": null
+          },
+          "75": {
+            "threshold": 75,
+            "status": "not_evaluable_no_positive_windows",
+            "window_prevalence": 0.0,
+            "point_prevalence": 0.0,
+            "window_precision": null,
+            "window_recall": null,
+            "point_brier_score": 0.0,
+            "true_positive_windows": 0,
+            "false_positive_windows": 0,
+            "false_negative_windows": 0,
+            "median_notice_hours": null
+          }
+        }
+      },
+      {
+        "code": "IT-BLG-01",
+        "city": "Bologna",
+        "n_windows": 340,
+        "overall": {
+          "mae": 2.8595,
+          "rmse": 4.1584,
+          "persistence_mae": 4.0025,
+          "seasonal_24h_mae": 4.6356,
+          "interval_80_coverage": 0.7009,
+          "interval_mean_width": 7.4593,
+          "interval_80_coverage_error": 0.0991,
+          "skill_vs_persistence": 0.2856,
+          "skill_vs_seasonal_24h": 0.3831
+        },
+        "horizon_bands": {
+          "0-24h": {
+            "mae": 1.3556,
+            "rmse": 2.3704,
+            "persistence_mae": 2.3321,
+            "seasonal_24h_mae": 3.9671,
+            "skill_vs_persistence": 0.4187,
+            "skill_vs_seasonal_24h": 0.6583
+          },
+          "24-48h": {
+            "mae": 3.4982,
+            "rmse": 4.7807,
+            "persistence_mae": 4.6462,
+            "seasonal_24h_mae": 4.9928,
+            "skill_vs_persistence": 0.2471,
+            "skill_vs_seasonal_24h": 0.2994
+          },
+          "48-72h": {
+            "mae": 3.7248,
+            "rmse": 4.8377,
+            "persistence_mae": 5.0293,
+            "seasonal_24h_mae": 4.947,
+            "skill_vs_persistence": 0.2594,
+            "skill_vs_seasonal_24h": 0.2471
+          }
+        },
+        "events": {
+          "50": {
+            "threshold": 50,
+            "status": "evaluated",
+            "window_prevalence": 0.0647,
+            "point_prevalence": 0.013,
+            "window_precision": 0.8,
+            "window_recall": 0.3636,
+            "point_brier_score": 0.0114,
+            "true_positive_windows": 8,
+            "false_positive_windows": 2,
+            "false_negative_windows": 14,
+            "median_notice_hours": 4.0
+          },
+          "75": {
+            "threshold": 75,
+            "status": "not_evaluable_no_positive_windows",
+            "window_prevalence": 0.0,
+            "point_prevalence": 0.0,
+            "window_precision": 0.0,
+            "window_recall": null,
+            "point_brier_score": 0.0001,
+            "true_positive_windows": 0,
+            "false_positive_windows": 1,
+            "false_negative_windows": 0,
+            "median_notice_hours": null
+          }
+        }
+      },
+      {
+        "code": "RO-BUC-01",
+        "city": "Bucharest",
+        "n_windows": 340,
+        "overall": {
+          "mae": 2.5804,
+          "rmse": 3.8313,
+          "persistence_mae": 3.7794,
+          "seasonal_24h_mae": 4.3737,
+          "interval_80_coverage": 0.7909,
+          "interval_mean_width": 7.7478,
+          "interval_80_coverage_error": 0.0091,
+          "skill_vs_persistence": 0.3172,
+          "skill_vs_seasonal_24h": 0.41
+        },
+        "horizon_bands": {
+          "0-24h": {
+            "mae": 1.1837,
+            "rmse": 1.9844,
+            "persistence_mae": 2.1939,
+            "seasonal_24h_mae": 3.7057,
+            "skill_vs_persistence": 0.4605,
+            "skill_vs_seasonal_24h": 0.6806
+          },
+          "24-48h": {
+            "mae": 3.1935,
+            "rmse": 4.3839,
+            "persistence_mae": 4.4251,
+            "seasonal_24h_mae": 4.7001,
+            "skill_vs_persistence": 0.2783,
+            "skill_vs_seasonal_24h": 0.3205
+          },
+          "48-72h": {
+            "mae": 3.364,
+            "rmse": 4.5695,
+            "persistence_mae": 4.719,
+            "seasonal_24h_mae": 4.7153,
+            "skill_vs_persistence": 0.2871,
+            "skill_vs_seasonal_24h": 0.2866
+          }
+        },
+        "events": {
+          "50": {
+            "threshold": 50,
+            "status": "evaluated",
+            "window_prevalence": 0.0176,
+            "point_prevalence": 0.0005,
+            "window_precision": 1.0,
+            "window_recall": 0.1667,
+            "point_brier_score": 0.0005,
+            "true_positive_windows": 1,
+            "false_positive_windows": 0,
+            "false_negative_windows": 5,
+            "median_notice_hours": 20.0
+          },
+          "75": {
+            "threshold": 75,
+            "status": "not_evaluable_no_positive_windows",
+            "window_prevalence": 0.0,
+            "point_prevalence": 0.0,
+            "window_precision": null,
+            "window_recall": null,
+            "point_brier_score": 0.0,
+            "true_positive_windows": 0,
+            "false_positive_windows": 0,
+            "false_negative_windows": 0,
+            "median_notice_hours": null
+          }
+        }
+      },
+      {
+        "code": "ES-VLC-01",
+        "city": "Valencia",
+        "n_windows": 340,
+        "overall": {
+          "mae": 2.7003,
+          "rmse": 4.4518,
+          "persistence_mae": 3.6582,
+          "seasonal_24h_mae": 4.2655,
+          "interval_80_coverage": 0.7943,
+          "interval_mean_width": 7.9264,
+          "interval_80_coverage_error": 0.0057,
+          "skill_vs_persistence": 0.2619,
+          "skill_vs_seasonal_24h": 0.3669
+        },
+        "horizon_bands": {
+          "0-24h": {
+            "mae": 1.1712,
+            "rmse": 2.2001,
+            "persistence_mae": 2.0494,
+            "seasonal_24h_mae": 3.4838,
+            "skill_vs_persistence": 0.4285,
+            "skill_vs_seasonal_24h": 0.6638
+          },
+          "24-48h": {
+            "mae": 3.2409,
+            "rmse": 5.0105,
+            "persistence_mae": 4.2039,
+            "seasonal_24h_mae": 4.5705,
+            "skill_vs_persistence": 0.2291,
+            "skill_vs_seasonal_24h": 0.2909
+          },
+          "48-72h": {
+            "mae": 3.6889,
+            "rmse": 5.4323,
+            "persistence_mae": 4.7213,
+            "seasonal_24h_mae": 4.7422,
+            "skill_vs_persistence": 0.2187,
+            "skill_vs_seasonal_24h": 0.2221
+          }
+        },
+        "events": {
+          "50": {
+            "threshold": 50,
+            "status": "evaluated",
+            "window_prevalence": 0.0265,
+            "point_prevalence": 0.0086,
+            "window_precision": 1.0,
+            "window_recall": 0.4444,
+            "point_brier_score": 0.0059,
+            "true_positive_windows": 4,
+            "false_positive_windows": 0,
+            "false_negative_windows": 5,
+            "median_notice_hours": 1.0
+          },
+          "75": {
+            "threshold": 75,
+            "status": "not_evaluable_no_positive_windows",
+            "window_prevalence": 0.0,
+            "point_prevalence": 0.0,
+            "window_precision": null,
+            "window_recall": null,
+            "point_brier_score": 0.0,
+            "true_positive_windows": 0,
+            "false_positive_windows": 0,
+            "false_negative_windows": 0,
+            "median_notice_hours": null
+          }
+        }
+      },
+      {
+        "code": "NL-UTR-01",
+        "city": "Utrecht",
+        "n_windows": 340,
+        "overall": {
+          "mae": 1.9791,
+          "rmse": 2.9398,
+          "persistence_mae": 2.3419,
+          "seasonal_24h_mae": 2.7096,
+          "interval_80_coverage": 0.8758,
+          "interval_mean_width": 8.1287,
+          "interval_80_coverage_error": 0.0758,
+          "skill_vs_persistence": 0.1549,
+          "skill_vs_seasonal_24h": 0.2696
+        },
+        "horizon_bands": {
+          "0-24h": {
+            "mae": 0.9922,
+            "rmse": 1.5839,
+            "persistence_mae": 1.3614,
+            "seasonal_24h_mae": 2.3196,
+            "skill_vs_persistence": 0.2712,
+            "skill_vs_seasonal_24h": 0.5723
+          },
+          "24-48h": {
+            "mae": 2.407,
+            "rmse": 3.3263,
+            "persistence_mae": 2.7352,
+            "seasonal_24h_mae": 2.9696,
+            "skill_vs_persistence": 0.12,
+            "skill_vs_seasonal_24h": 0.1895
+          },
+          "48-72h": {
+            "mae": 2.5381,
+            "rmse": 3.515,
+            "persistence_mae": 2.929,
+            "seasonal_24h_mae": 2.8395,
+            "skill_vs_persistence": 0.1334,
+            "skill_vs_seasonal_24h": 0.1061
+          }
+        },
+        "events": {
+          "50": {
+            "threshold": 50,
+            "status": "not_evaluable_no_positive_windows",
+            "window_prevalence": 0.0,
+            "point_prevalence": 0.0,
+            "window_precision": null,
+            "window_recall": null,
+            "point_brier_score": 0.0,
+            "true_positive_windows": 0,
+            "false_positive_windows": 0,
+            "false_negative_windows": 0,
+            "median_notice_hours": null
+          },
+          "75": {
+            "threshold": 75,
+            "status": "not_evaluable_no_positive_windows",
+            "window_prevalence": 0.0,
+            "point_prevalence": 0.0,
+            "window_precision": null,
+            "window_recall": null,
+            "point_brier_score": 0.0,
+            "true_positive_windows": 0,
+            "false_positive_windows": 0,
+            "false_negative_windows": 0,
+            "median_notice_hours": null
+          }
+        }
+      }
+    ]
+  },
+  "leave_one_city_out": {
+    "protocol": "Hold out every reach in one city, then train and calibrate only on other cities.",
+    "macro_average": {
+      "mae": 2.5497,
+      "mae_std": 0.3005,
+      "skill_vs_persistence": 0.2649
+    },
+    "folds": [
+      {
+        "city": "Coimbra",
+        "codes": [
+          "PT-CBR-01",
+          "PT-CBR-02"
+        ],
+        "n_windows": 680,
+        "overall": {
+          "mae": 2.6292,
+          "rmse": 4.1921,
+          "persistence_mae": 3.7815,
+          "seasonal_24h_mae": 4.4125,
+          "interval_80_coverage": 0.7867,
+          "interval_mean_width": 8.3843,
+          "interval_80_coverage_error": 0.0133,
+          "skill_vs_persistence": 0.3047,
+          "skill_vs_seasonal_24h": 0.4041
+        },
+        "horizon_bands": {
+          "0-24h": {
+            "mae": 1.215,
+            "rmse": 2.1422,
+            "persistence_mae": 2.1466,
+            "seasonal_24h_mae": 3.6462,
+            "skill_vs_persistence": 0.434,
+            "skill_vs_seasonal_24h": 0.6668
+          },
+          "24-48h": {
+            "mae": 3.189,
+            "rmse": 4.754,
+            "persistence_mae": 4.3647,
+            "seasonal_24h_mae": 4.7367,
+            "skill_vs_persistence": 0.2694,
+            "skill_vs_seasonal_24h": 0.3267
+          },
+          "48-72h": {
+            "mae": 3.4837,
+            "rmse": 5.0529,
+            "persistence_mae": 4.8333,
+            "seasonal_24h_mae": 4.8545,
+            "skill_vs_persistence": 0.2792,
+            "skill_vs_seasonal_24h": 0.2824
+          }
+        },
+        "events": {
+          "50": {
+            "threshold": 50,
+            "status": "evaluated",
+            "window_prevalence": 0.0353,
+            "point_prevalence": 0.0082,
+            "window_precision": 1.0,
+            "window_recall": 0.2917,
+            "point_brier_score": 0.0062,
+            "true_positive_windows": 7,
+            "false_positive_windows": 0,
+            "false_negative_windows": 17,
+            "median_notice_hours": 1.0
+          },
+          "75": {
+            "threshold": 75,
+            "status": "not_evaluable_no_positive_windows",
+            "window_prevalence": 0.0,
+            "point_prevalence": 0.0,
+            "window_precision": null,
+            "window_recall": null,
+            "point_brier_score": 0.0,
+            "true_positive_windows": 0,
+            "false_positive_windows": 0,
+            "false_negative_windows": 0,
+            "median_notice_hours": null
+          }
+        }
+      },
+      {
+        "city": "Bologna",
+        "codes": [
+          "IT-BLG-01"
+        ],
+        "n_windows": 340,
+        "overall": {
+          "mae": 2.8595,
+          "rmse": 4.1584,
+          "persistence_mae": 4.0025,
+          "seasonal_24h_mae": 4.6356,
+          "interval_80_coverage": 0.7009,
+          "interval_mean_width": 7.4593,
+          "interval_80_coverage_error": 0.0991,
+          "skill_vs_persistence": 0.2856,
+          "skill_vs_seasonal_24h": 0.3831
+        },
+        "horizon_bands": {
+          "0-24h": {
+            "mae": 1.3556,
+            "rmse": 2.3704,
+            "persistence_mae": 2.3321,
+            "seasonal_24h_mae": 3.9671,
+            "skill_vs_persistence": 0.4187,
+            "skill_vs_seasonal_24h": 0.6583
+          },
+          "24-48h": {
+            "mae": 3.4982,
+            "rmse": 4.7807,
+            "persistence_mae": 4.6462,
+            "seasonal_24h_mae": 4.9928,
+            "skill_vs_persistence": 0.2471,
+            "skill_vs_seasonal_24h": 0.2994
+          },
+          "48-72h": {
+            "mae": 3.7248,
+            "rmse": 4.8377,
+            "persistence_mae": 5.0293,
+            "seasonal_24h_mae": 4.947,
+            "skill_vs_persistence": 0.2594,
+            "skill_vs_seasonal_24h": 0.2471
+          }
+        },
+        "events": {
+          "50": {
+            "threshold": 50,
+            "status": "evaluated",
+            "window_prevalence": 0.0647,
+            "point_prevalence": 0.013,
+            "window_precision": 0.8,
+            "window_recall": 0.3636,
+            "point_brier_score": 0.0114,
+            "true_positive_windows": 8,
+            "false_positive_windows": 2,
+            "false_negative_windows": 14,
+            "median_notice_hours": 4.0
+          },
+          "75": {
+            "threshold": 75,
+            "status": "not_evaluable_no_positive_windows",
+            "window_prevalence": 0.0,
+            "point_prevalence": 0.0,
+            "window_precision": 0.0,
+            "window_recall": null,
+            "point_brier_score": 0.0001,
+            "true_positive_windows": 0,
+            "false_positive_windows": 1,
+            "false_negative_windows": 0,
+            "median_notice_hours": null
+          }
+        }
+      },
+      {
+        "city": "Bucharest",
+        "codes": [
+          "RO-BUC-01"
+        ],
+        "n_windows": 340,
+        "overall": {
+          "mae": 2.5804,
+          "rmse": 3.8313,
+          "persistence_mae": 3.7794,
+          "seasonal_24h_mae": 4.3737,
+          "interval_80_coverage": 0.7909,
+          "interval_mean_width": 7.7478,
+          "interval_80_coverage_error": 0.0091,
+          "skill_vs_persistence": 0.3172,
+          "skill_vs_seasonal_24h": 0.41
+        },
+        "horizon_bands": {
+          "0-24h": {
+            "mae": 1.1837,
+            "rmse": 1.9844,
+            "persistence_mae": 2.1939,
+            "seasonal_24h_mae": 3.7057,
+            "skill_vs_persistence": 0.4605,
+            "skill_vs_seasonal_24h": 0.6806
+          },
+          "24-48h": {
+            "mae": 3.1935,
+            "rmse": 4.3839,
+            "persistence_mae": 4.4251,
+            "seasonal_24h_mae": 4.7001,
+            "skill_vs_persistence": 0.2783,
+            "skill_vs_seasonal_24h": 0.3205
+          },
+          "48-72h": {
+            "mae": 3.364,
+            "rmse": 4.5695,
+            "persistence_mae": 4.719,
+            "seasonal_24h_mae": 4.7153,
+            "skill_vs_persistence": 0.2871,
+            "skill_vs_seasonal_24h": 0.2866
+          }
+        },
+        "events": {
+          "50": {
+            "threshold": 50,
+            "status": "evaluated",
+            "window_prevalence": 0.0176,
+            "point_prevalence": 0.0005,
+            "window_precision": 1.0,
+            "window_recall": 0.1667,
+            "point_brier_score": 0.0005,
+            "true_positive_windows": 1,
+            "false_positive_windows": 0,
+            "false_negative_windows": 5,
+            "median_notice_hours": 20.0
+          },
+          "75": {
+            "threshold": 75,
+            "status": "not_evaluable_no_positive_windows",
+            "window_prevalence": 0.0,
+            "point_prevalence": 0.0,
+            "window_precision": null,
+            "window_recall": null,
+            "point_brier_score": 0.0,
+            "true_positive_windows": 0,
+            "false_positive_windows": 0,
+            "false_negative_windows": 0,
+            "median_notice_hours": null
+          }
+        }
+      },
+      {
+        "city": "Valencia",
+        "codes": [
+          "ES-VLC-01"
+        ],
+        "n_windows": 340,
+        "overall": {
+          "mae": 2.7003,
+          "rmse": 4.4518,
+          "persistence_mae": 3.6582,
+          "seasonal_24h_mae": 4.2655,
+          "interval_80_coverage": 0.7943,
+          "interval_mean_width": 7.9264,
+          "interval_80_coverage_error": 0.0057,
+          "skill_vs_persistence": 0.2619,
+          "skill_vs_seasonal_24h": 0.3669
+        },
+        "horizon_bands": {
+          "0-24h": {
+            "mae": 1.1712,
+            "rmse": 2.2001,
+            "persistence_mae": 2.0494,
+            "seasonal_24h_mae": 3.4838,
+            "skill_vs_persistence": 0.4285,
+            "skill_vs_seasonal_24h": 0.6638
+          },
+          "24-48h": {
+            "mae": 3.2409,
+            "rmse": 5.0105,
+            "persistence_mae": 4.2039,
+            "seasonal_24h_mae": 4.5705,
+            "skill_vs_persistence": 0.2291,
+            "skill_vs_seasonal_24h": 0.2909
+          },
+          "48-72h": {
+            "mae": 3.6889,
+            "rmse": 5.4323,
+            "persistence_mae": 4.7213,
+            "seasonal_24h_mae": 4.7422,
+            "skill_vs_persistence": 0.2187,
+            "skill_vs_seasonal_24h": 0.2221
+          }
+        },
+        "events": {
+          "50": {
+            "threshold": 50,
+            "status": "evaluated",
+            "window_prevalence": 0.0265,
+            "point_prevalence": 0.0086,
+            "window_precision": 1.0,
+            "window_recall": 0.4444,
+            "point_brier_score": 0.0059,
+            "true_positive_windows": 4,
+            "false_positive_windows": 0,
+            "false_negative_windows": 5,
+            "median_notice_hours": 1.0
+          },
+          "75": {
+            "threshold": 75,
+            "status": "not_evaluable_no_positive_windows",
+            "window_prevalence": 0.0,
+            "point_prevalence": 0.0,
+            "window_precision": null,
+            "window_recall": null,
+            "point_brier_score": 0.0,
+            "true_positive_windows": 0,
+            "false_positive_windows": 0,
+            "false_negative_windows": 0,
+            "median_notice_hours": null
+          }
+        }
+      },
+      {
+        "city": "Utrecht",
+        "codes": [
+          "NL-UTR-01"
+        ],
+        "n_windows": 340,
+        "overall": {
+          "mae": 1.9791,
+          "rmse": 2.9398,
+          "persistence_mae": 2.3419,
+          "seasonal_24h_mae": 2.7096,
+          "interval_80_coverage": 0.8758,
+          "interval_mean_width": 8.1287,
+          "interval_80_coverage_error": 0.0758,
+          "skill_vs_persistence": 0.1549,
+          "skill_vs_seasonal_24h": 0.2696
+        },
+        "horizon_bands": {
+          "0-24h": {
+            "mae": 0.9922,
+            "rmse": 1.5839,
+            "persistence_mae": 1.3614,
+            "seasonal_24h_mae": 2.3196,
+            "skill_vs_persistence": 0.2712,
+            "skill_vs_seasonal_24h": 0.5723
+          },
+          "24-48h": {
+            "mae": 2.407,
+            "rmse": 3.3263,
+            "persistence_mae": 2.7352,
+            "seasonal_24h_mae": 2.9696,
+            "skill_vs_persistence": 0.12,
+            "skill_vs_seasonal_24h": 0.1895
+          },
+          "48-72h": {
+            "mae": 2.5381,
+            "rmse": 3.515,
+            "persistence_mae": 2.929,
+            "seasonal_24h_mae": 2.8395,
+            "skill_vs_persistence": 0.1334,
+            "skill_vs_seasonal_24h": 0.1061
+          }
+        },
+        "events": {
+          "50": {
+            "threshold": 50,
+            "status": "not_evaluable_no_positive_windows",
+            "window_prevalence": 0.0,
+            "point_prevalence": 0.0,
+            "window_precision": null,
+            "window_recall": null,
+            "point_brier_score": 0.0,
+            "true_positive_windows": 0,
+            "false_positive_windows": 0,
+            "false_negative_windows": 0,
+            "median_notice_hours": null
+          },
+          "75": {
+            "threshold": 75,
+            "status": "not_evaluable_no_positive_windows",
+            "window_prevalence": 0.0,
+            "point_prevalence": 0.0,
+            "window_precision": null,
+            "window_recall": null,
+            "point_brier_score": 0.0,
+            "true_positive_windows": 0,
+            "false_positive_windows": 0,
+            "false_negative_windows": 0,
+            "median_notice_hours": null
+          }
+        }
+      }
+    ]
+  }
+}

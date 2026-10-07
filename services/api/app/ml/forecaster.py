@@ -106,6 +106,7 @@ class RidgeForecaster:
         self.scaler = StandardScaler()
         self.model = Ridge(alpha=alpha)
         self.resid_q = None            # (2, horizon) 10th/90th residual quantiles
+        self.calibration_residuals = None
         self.version = MODEL_VERSION + "-ridge"
 
     @staticmethod
@@ -130,16 +131,30 @@ class RidgeForecaster:
     def _design(self, X: np.ndarray) -> np.ndarray:
         return np.vstack([self._summarise(w) for w in X])
 
-    def fit(self, X: np.ndarray, Y: np.ndarray, calibration_fraction: float = 0.2) -> "RidgeForecaster":
+    def fit(
+        self,
+        X: np.ndarray,
+        Y: np.ndarray,
+        calibration_fraction: float = 0.2,
+        X_cal: np.ndarray | None = None,
+        Y_cal: np.ndarray | None = None,
+    ) -> "RidgeForecaster":
         D = self._design(X)
-        n_cal = max(72, int(len(D) * calibration_fraction)) if len(D) >= 180 else max(1, len(D) // 5)
-        cut = len(D) - n_cal
-        d_train = self.scaler.fit_transform(D[:cut])
-        self.model.fit(d_train, Y[:cut])
+        if X_cal is None or Y_cal is None:
+            n_cal = max(72, int(len(D) * calibration_fraction)) if len(D) >= 180 else max(1, len(D) // 5)
+            cut = len(D) - n_cal
+            D_train, Y_train = D[:cut], Y[:cut]
+            D_cal, Y_calibration = D[cut:], Y[cut:]
+        else:
+            D_train, Y_train = D, Y
+            D_cal, Y_calibration = self._design(X_cal), Y_cal
+        d_train = self.scaler.fit_transform(D_train)
+        self.model.fit(d_train, Y_train)
         # Hold out the most recent windows for split-conformal residual
         # calibration. The interval is no longer estimated on fitted samples.
-        d_cal = self.scaler.transform(D[cut:])
-        resid = Y[cut:] - self.model.predict(d_cal)
+        d_cal = self.scaler.transform(D_cal)
+        resid = Y_calibration - self.model.predict(d_cal)
+        self.calibration_residuals = resid
         self.resid_q = np.vstack([
             np.percentile(resid, 10, axis=0),
             np.percentile(resid, 90, axis=0),
