@@ -116,8 +116,15 @@ The long-term vision is simple: make freshwater evidence understandable early en
 
 ## Try it out
 
-- **Live demo:** _deployment URL will be added after production deployment_
+- **Live demo:** [watsen-nine.vercel.app](https://watsen-nine.vercel.app)
 - **Source code:** [github.com/codewithanshuman/WatSen](https://github.com/codewithanshuman/WatSen)
+
+## Built with
+
+React, Vite, JavaScript, CSS3, Recharts, FastAPI, Python, Pydantic, NumPy,
+scikit-learn, Pillow, ONNX Runtime, REST API, HL7 FHIR R4, OneAquaHealth,
+BMWP, ASPT, Citizen Science, Machine Learning, Explainable AI,
+Human-in-the-loop, Vercel, GitHub, Docker, PostgreSQL / PostGIS
 
 ## Demo path
 

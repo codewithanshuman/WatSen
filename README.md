@@ -14,7 +14,7 @@ One Health communication in one auditable loop.
 ## Project links
 
 - **Source:** [github.com/codewithanshuman/WatSen](https://github.com/codewithanshuman/WatSen)
-- **Live demo:** production URL will be added after deployment
+- **Live demo:** [watsen-nine.vercel.app](https://watsen-nine.vercel.app)
 - **Devpost submission copy:** [DEVPOST.md](DEVPOST.md)
 
 ## Run the complete demo
