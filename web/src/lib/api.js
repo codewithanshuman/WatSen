@@ -1,6 +1,11 @@
-const isLocalDevServer = ['localhost', '127.0.0.1'].includes(window.location.hostname)
-  && ['3000', '4173', '5173'].includes(window.location.port)
-const BASE = import.meta.env.VITE_API_BASE || (isLocalDevServer ? 'http://localhost:8000' : '')
+const BASE = import.meta.env.VITE_API_BASE || (import.meta.env.DEV ? 'http://localhost:8000' : '')
+
+async function mutation(path, options) {
+  const res = await fetch(`${BASE}${path}`, { ...options, signal: AbortSignal.timeout(45000) })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw Object.assign(new Error(typeof body.detail === 'string' ? body.detail : 'The server could not accept this request.'), { status: res.status })
+  return body
+}
 
 async function get(path, params = {}) {
   const qs = new URLSearchParams(
@@ -8,6 +13,7 @@ async function get(path, params = {}) {
   ).toString()
   const res = await fetch(`${BASE}${path}${qs ? `?${qs}` : ''}`)
   if (!res.ok) throw new Error(`${path} -> ${res.status}`)
+  if (res.headers.get('X-WatSen-Cache') === 'offline') window.dispatchEvent(new CustomEvent('watsen:cached-evidence', { detail: res.headers.get('X-WatSen-Cached-At') }))
   return res.json()
 }
 
@@ -37,34 +43,27 @@ export const api = {
   incident: (code, scenario) => get(`/v1/segments/${code}/incident`, { scenario }),
   modelCard: () => get('/v1/models/watforecast'),
   reviewQueue: () => get('/v1/review-queue'),
+  taxa: () => get('/v1/taxa'),
+  receipts: id => get(`/v1/observations/${encodeURIComponent(id)}/receipts`),
   fhirValidation: (code, scenario) => get(`/v1/segments/${code}/fhir/validate`, { scenario }),
   fhirUrl: (code, scenario) => `${BASE}/v1/segments/${code}/fhir?scenario=${scenario}`,
   submit: async (payload) => {
-    const res = await fetch(`${BASE}/v1/observations`, {
+    return mutation('/v1/observations', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    const body = await res.json()
-    if (!res.ok) throw new Error(body.detail || 'Submission failed')
-    return body
   },
   classify: async (file) => {
     const form = new FormData()
     form.append('image', file)
-    const res = await fetch(`${BASE}/v1/classify`, { method: 'POST', body: form })
-    const body = await res.json()
-    if (!res.ok) throw new Error(body.detail || 'Image assessment failed')
-    return body
+    return mutation('/v1/classify', { method: 'POST', body: form })
   },
   review: async (id, payload) => {
-    const res = await fetch(`${BASE}/v1/observations/${id}/review`, {
+    return mutation(`/v1/observations/${id}/review`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    const body = await res.json()
-    if (!res.ok) throw new Error(body.detail || 'Review failed')
-    return body
   },
 }
 

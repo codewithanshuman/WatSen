@@ -22,7 +22,9 @@ jobs:
       - run: python -m pip install -r services/api/requirements.txt
       - name: API contract and evidence-loop tests
         working-directory: services/api
-        run: python -m app.selftest
+        run: |
+          python -m app.selftest
+          python -m unittest app.test_evidence_workflow -v
       - name: Reproduce forecast evaluation
         working-directory: services/api
         run: python -m app.ml.evaluate_forecaster --days 180 --stride 12 --json-out ../../artifacts/forecast_evaluation.json --markdown-out ../../artifacts/FORECAST_EVALUATION.md
@@ -36,6 +38,9 @@ jobs:
       - name: Build production web app
         working-directory: web
         run: pnpm run build
+      - name: Offline retry, receipt and cache regressions
+        working-directory: web
+        run: pnpm run test:field
       - uses: actions/upload-artifact@v4
         with:
           name: forecast-evidence

@@ -24,7 +24,11 @@ Completed:
   non-hydraulic model boundary; and
 - an installable offline-first field PWA with a durable device queue, automatic
   reconnect synchronization, on-device capture-quality guidance and auditable
-  observation-impact receipts.
+  observation-impact receipts; and
+- an expert evidence workbench with family corrections, reviewer notes, retained
+  device thumbnails and exportable receipt history; stable retry identities,
+  automatic backoff and atomic local receipt handoff; and regression tests for
+  interrupted acknowledgments, concurrent submissions and review reversals.
 
 Next implementation target: durable multi-user production storage, privacy and
 pilot evidence.

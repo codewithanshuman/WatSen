@@ -106,7 +106,13 @@ the recent evidence stands on its own.
   image upload, plus server quality assessment and optional ONNX inference
 - Observation-impact receipts showing accepted/review state and exact before →
   after changes to ASPT, BMWP, accepted-record count and composite stress
-- Human review queue with confirm, correct and reject actions
+- Persistent device receipt ledger with JSON exports and server review-history checks
+- Expert workbench with reduced device photos, family correction, reviewer notes
+  and separate receipts for confirmations, corrections and exclusions
+- Stable submission IDs, exact-payload retries, bounded backoff and atomic local
+  receipt/image handoff; server replay protection is limited to one demo process
+- Revisioned offline shell including lazy workspace chunks, with visibly dated
+  cached evidence and protection against caching server errors
 - Server-derived distance, submission velocity and contributor trust
 - Observation-driven BMWP/ASPT and stream stress
 - Evidence graph, provenance badges and incident replay
@@ -152,6 +158,8 @@ POST /v1/classify
 POST /v1/observations
 GET  /v1/review-queue
 POST /v1/observations/{id}/review
+GET  /v1/observations/{id}/receipts
+GET  /v1/taxa
 GET  /v1/models/watforecast
 GET  /v1/segments/{code}/fhir
 GET  /v1/segments/{code}/fhir/validate

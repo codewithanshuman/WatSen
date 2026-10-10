@@ -1,47 +1,60 @@
-const CACHE = 'watsen-shell-v4'
-const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/assets/logo.png', '/assets/watsen-mark.svg', '/assets/field-camera.png']
+// The build replaces these constants with a content-addressed bundle manifest.
+const VERSION = '__WATSEN_BUILD__'
+const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/assets/logo.png', '/assets/field-camera.png']
+const SHELL = `watsen-shell-${VERSION}`
+const DATA = `watsen-data-${VERSION}`
 
 self.addEventListener('install', event => {
+  event.waitUntil(caches.open(SHELL).then(cache => cache.addAll(PRECACHE)).then(() => self.skipWaiting()))
+})
+self.addEventListener('activate', event => {
   event.waitUntil((async () => {
-    const cache = await caches.open(CACHE)
-    const response = await fetch('/index.html', { cache: 'no-store' })
-    const html = await response.clone().text()
-    const bundles = [...html.matchAll(/(?:src|href)="(\/assets\/[^"?]+)["?]/g)].map(match => match[1])
-    await cache.put('/index.html', response)
-    await cache.addAll([...new Set([...SHELL, ...bundles])])
-    await self.skipWaiting()
+    const keys = await caches.keys()
+    await Promise.all(keys.filter(key => (key.startsWith('watsen-shell-') || key.startsWith('watsen-data-')) && key !== SHELL && key !== DATA).map(key => caches.delete(key)))
+    await self.clients.claim()
   })())
 })
 
-self.addEventListener('activate', event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim()))
-})
+async function readEvidence(request) {
+  const cache = await caches.open(DATA)
+  try {
+    const response = await fetch(request, { signal: AbortSignal.timeout(12000) })
+    if (response.ok) {
+      const headers = new Headers(response.headers)
+      headers.set('X-WatSen-Cached-At', new Date().toISOString())
+      const copy = new Response(await response.clone().arrayBuffer(), { status: response.status, headers })
+      try { await cache.put(request, copy) } catch { /* Full device storage must not hide a successful response. */ }
+      return response
+    }
+    if (response.status < 500) return response
+    throw new Error('Server unavailable')
+  } catch {
+    const cached = await cache.match(request)
+    if (cached) {
+      const headers = new Headers(cached.headers)
+      headers.set('X-WatSen-Cache', 'offline')
+      return new Response(await cached.arrayBuffer(), { status: cached.status, headers })
+    }
+    return new Response(JSON.stringify({ detail: 'No saved evidence for this request. Reconnect to load this reach.' }), { status: 503, headers: { 'Content-Type': 'application/json' } })
+  }
+}
 
 self.addEventListener('fetch', event => {
   const request = event.request
-  if (request.method !== 'GET') return
   const url = new URL(request.url)
+  if (url.origin !== self.location.origin || request.method !== 'GET') return
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).then(response => {
-      const copy = response.clone()
-      caches.open(CACHE).then(cache => cache.put('/index.html', copy))
-      return response
+    event.respondWith(fetch(request).then(async response => {
+      if (response.ok) return response
+      return (await caches.match('/index.html')) || response
     }).catch(() => caches.match('/index.html')))
     return
   }
-  if (url.pathname.startsWith('/v1/')) {
-    event.respondWith(fetch(request).then(response => {
-      const copy = response.clone()
-      caches.open(CACHE).then(cache => cache.put(request, copy))
-      return response
-    }).catch(() => caches.match(request)))
+  if (url.pathname.startsWith('/v1/') || url.pathname === '/health') {
+    // Receipt history and review actions must never imply a cached review is current.
+    if (url.pathname.endsWith('/receipts') || url.pathname === '/v1/review-queue') return
+    event.respondWith(readEvidence(request))
     return
   }
-  event.respondWith(caches.match(request).then(cached => cached || fetch(request).then(response => {
-    if (response.ok && url.origin === self.location.origin) {
-      const copy = response.clone()
-      caches.open(CACHE).then(cache => cache.put(request, copy))
-    }
-    return response
-  })))
+  event.respondWith(caches.match(request).then(cached => cached || fetch(request)))
 })

@@ -58,6 +58,9 @@ class MockStore:
         }
         self.observations: list[dict] = []
         self.audit_events: list[dict] = []
+        self.evidence_lock = threading.RLock()
+        self.submission_responses: dict[str, dict] = {}
+        self.receipt_history: dict[str, list[dict]] = {}
         self.briefs: dict[str, dict] = {}
         self.scorer = SubmissionScorer()
         self._model: RidgeForecaster | None = None
@@ -235,6 +238,7 @@ class MockStore:
             "reviewed_at": None,
             "model": payload.get("model"),
             "image_quality": payload.get("image_quality"),
+            "client_submission_id": payload.get("client_submission_id"),
         }
         self.observations.append(row)
         self.briefs.clear()
@@ -249,10 +253,14 @@ class MockStore:
         return next((o for o in self.observations if o["id"] == observation_id), None)
 
     def review_observation(self, observation_id: str, action: str,
-                           reviewer: str, corrected_taxon: str | None = None) -> dict:
+                           reviewer: str, corrected_taxon: str | None = None,
+                           reviewer_note: str = "") -> dict:
         row = self.observation(observation_id)
         if row is None:
             raise KeyError(observation_id)
+        before = {key: row.get(key) for key in ("state", "predicted_taxon")}
+        if action == "confirm" and row.get("predicted_taxon") not in stress_mod.BMWP_FAMILY:
+            raise ValueError("Choose a scoring family with the correct action before confirming")
         if action == "confirm":
             row["state"] = "expert_confirmed"
         elif action == "correct":
@@ -267,11 +275,14 @@ class MockStore:
             raise ValueError("action must be confirm, correct or reject")
         row["reviewed_by"] = reviewer
         row["reviewed_at"] = _now().isoformat()
+        row["reviewer_note"] = reviewer_note
         self.briefs.clear()
         self._forecast_cache.clear()
         self._audit(row["segment_code"], "expert_review", {
             "observation_id": row["id"], "action": action,
             "taxon": row.get("predicted_taxon"), "reviewer": reviewer,
+            "reviewer_note": reviewer_note, "before": before,
+            "after": {key: row.get(key) for key in ("state", "predicted_taxon")},
         })
         return row
 
@@ -291,14 +302,16 @@ class MockStore:
         }
 
     def biological_index(self, code: str, days: int = 30) -> dict:
-        cutoff = _now() - timedelta(days=days)
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(days=days)
         accepted = [
             o for o in self.observations
             if o["segment_code"] == code
             and o.get("state") in {"auto_accepted", "expert_confirmed"}
             and (o.get("quality_score") or 0) >= .7
             and _utc(datetime.fromisoformat(o["observed_at"])) >= cutoff
-            and o.get("predicted_taxon")
+            and _utc(datetime.fromisoformat(o["observed_at"])) <= now
+            and o.get("predicted_taxon") in stress_mod.BMWP_FAMILY
         ]
         taxa = sorted({o["predicted_taxon"] for o in accepted})
         result = stress_mod.bmwp_from_taxa(taxa)

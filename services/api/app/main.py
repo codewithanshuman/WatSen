@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
@@ -20,6 +20,8 @@ from pydantic import BaseModel, Field, field_validator
 from app.core import fhir
 from app.core import decision
 from app.core import catchment
+from app.core import evidence_workflow as evidence
+from app.core.stress import BMWP_FAMILY
 from app.core.scenarios import SCENARIOS
 from app.core.anomaly import Submission
 from app.insight import brief as brief_engine
@@ -52,15 +54,16 @@ app.add_middleware(
 # ── models ─────────────────────────────────────────────────────────
 
 class ObservationIn(BaseModel):
+    client_submission_id: str | None = Field(None, min_length=8, max_length=128, pattern=r"^[a-zA-Z0-9_-]+$")
     segment_code: str = Field(..., examples=["IT-BLG-01"])
     observed_at: datetime
-    lat: float
-    lon: float
+    lat: float = Field(..., ge=-90, le=90)
+    lon: float = Field(..., ge=-180, le=180)
     contributor: str = "anonymous"
     note: str = ""
     predicted_taxon: str | None = Field(None, examples=["Baetidae"])
     taxon_confidence: float | None = Field(None, ge=0, le=1)
-    n_photos: int = 1
+    n_photos: int = Field(1, ge=0, le=100)
     readings: dict[str, float] | None = None
     model: str | None = None
     image_quality: dict | None = None
@@ -77,6 +80,7 @@ class ReviewIn(BaseModel):
     action: str = Field(..., pattern="^(confirm|correct|reject)$")
     reviewer: str = "expert-reviewer"
     corrected_taxon: str | None = None
+    reviewer_note: str = Field("", max_length=2000)
 
 
 # ── meta ───────────────────────────────────────────────────────────
@@ -196,7 +200,20 @@ def list_observations(segment_code: str | None = None, limit: int = Query(100, l
 
 
 @app.post("/v1/observations", tags=["observations"], status_code=201)
-def submit_observation(payload: ObservationIn):
+def submit_observation(payload: ObservationIn, response: Response):
+    store = get_store()
+    data = payload.model_dump(mode="json")
+    # Check raw metadata before JSON-mode serialization can normalize NaN to null.
+    evidence.fingerprint({**data, "image_quality": payload.image_quality, "readings": payload.readings})
+    with store.evidence_lock:
+        existing = evidence.replay(store, data)
+        if existing is not None:
+            response.status_code = 200
+            return existing
+        return evidence.record_submission(store, data, _submit_observation(payload))
+
+
+def _submit_observation(payload: ObservationIn):
     """
     Validate and store a citizen submission.
 
@@ -231,14 +248,14 @@ def submit_observation(payload: ObservationIn):
         submissions_last_hour=submissions_1h,
         contributor_trust=trust,
     )
-    scored = store.scorer.score(sub)
+    scored = evidence.require_model_review(payload.model_dump(), store.scorer.score(sub))
     row = store.add_observation(
         {**payload.model_dump(), "observed_at": payload.observed_at.isoformat(),
          "distance_to_stream_m": distance}, scored
     )
     after_bio = store.biological_index(payload.segment_code)
     after_stress = store.segment_summary(payload.segment_code)["stress"]
-    receipt = _impact_receipt(row, before_bio, after_bio, before_stress, after_stress)
+    receipt = evidence.impact_receipt(store, row, before_bio, after_bio, before_stress, after_stress)
     return {"observation": row, "validation": scored,
             "server_checks": {"distance_to_stream_m": distance,
                               "submissions_last_hour": submissions_1h,
@@ -265,16 +282,24 @@ def review_queue():
 
 @app.post("/v1/observations/{observation_id}/review", tags=["observations"])
 def review_observation(observation_id: str, payload: ReviewIn):
+    with get_store().evidence_lock:
+        return _review_observation(observation_id, payload)
+
+
+def _review_observation(observation_id: str, payload: ReviewIn):
     store = get_store()
     existing = store.observation(observation_id)
     if existing is None:
         raise HTTPException(404, "observation not found")
     code = existing["segment_code"]
+    previous = {key: existing.get(key) for key in ("state", "predicted_taxon")}
+    if (payload.action == "correct" or existing.get("reviewed_at")) and not payload.reviewer_note.strip():
+        raise HTTPException(422, "Explain the correction or revised decision in a reviewer note.")
     before_bio = store.biological_index(code)
     before_stress = store.segment_summary(code)["stress"]
     try:
         row = store.review_observation(
-            observation_id, payload.action, payload.reviewer, payload.corrected_taxon)
+            observation_id, payload.action, payload.reviewer, payload.corrected_taxon, payload.reviewer_note.strip())
     except KeyError as exc:
         raise HTTPException(404, "observation not found") from exc
     except ValueError as exc:
@@ -282,48 +307,25 @@ def review_observation(observation_id: str, payload: ReviewIn):
     after_bio = store.biological_index(code)
     after_stress = store.segment_summary(code)["stress"]
     return {"observation": row, "biological_index": after_bio,
-            "impact_receipt": _impact_receipt(
-                row, before_bio, after_bio, before_stress, after_stress)}
+            "impact_receipt": evidence.impact_receipt(
+                store, row, before_bio, after_bio, before_stress, after_stress,
+                event=payload.action, previous=previous, reviewer_note=payload.reviewer_note.strip())}
 
 
-def _impact_receipt(row: dict, before_bio: dict, after_bio: dict,
-                    before_stress: float, after_stress: float) -> dict:
-    accepted = row["state"] in {"auto_accepted", "expert_confirmed"}
-    changed = (
-        before_bio.get("aspt") != after_bio.get("aspt")
-        or before_bio.get("bmwp") != after_bio.get("bmwp")
-        or before_bio.get("n_observations") != after_bio.get("n_observations")
-    )
-    if row["state"] == "needs_review":
-        status = "pending_review"
-        message = "Queued for expert review. No ecological index changed yet."
-    elif row["state"] == "rejected":
-        status = "not_applied"
-        message = "The record was not applied to the ecological index."
-    elif changed:
-        status = "applied"
-        message = "Accepted evidence updated the 30-day biological evidence window."
-    else:
-        status = "accepted_no_index_change"
-        message = "Accepted, but this family was already represented in the evidence window."
-    return {
-        "receipt_id": f"impact-{row['id']}", "observation_id": row["id"],
-        "status": status, "message": message, "accepted": accepted,
-        "changes": {
-            "aspt": {"before": before_bio.get("aspt"), "after": after_bio.get("aspt"),
-                     "delta": round((after_bio.get("aspt") or 0) - (before_bio.get("aspt") or 0), 2)},
-            "bmwp": {"before": before_bio.get("bmwp"), "after": after_bio.get("bmwp"),
-                     "delta": (after_bio.get("bmwp") or 0) - (before_bio.get("bmwp") or 0)},
-            "accepted_observations": {
-                "before": before_bio.get("n_observations"), "after": after_bio.get("n_observations"),
-                "delta": (after_bio.get("n_observations") or 0) - (before_bio.get("n_observations") or 0)},
-            "stress": {"before": before_stress, "after": after_stress,
-                       "delta": round(after_stress - before_stress, 2)},
-        },
-        "trace": ["submission_received", "server_quality_checks", row["state"],
-                  "biological_window_recomputed" if accepted else "awaiting_or_not_applied"],
-        "boundary": "A receipt reports a deterministic evidence-window update, not causal ecological impact.",
-    }
+@app.get("/v1/taxa", tags=["observations"])
+def scoring_taxa():
+    return {"taxa": [{"family": family, "bmwp": score} for family, score in sorted(BMWP_FAMILY.items())]}
+
+
+@app.get("/v1/observations/{observation_id}/receipts", tags=["observations"])
+def observation_receipts(observation_id: str):
+    store = get_store()
+    with store.evidence_lock:
+        if store.observation(observation_id) is None:
+            raise HTTPException(404, "This observation is unavailable in the current demo server session. Your device receipt remains available.")
+        return {"observation_id": observation_id,
+                "receipts": store.receipt_history.get(observation_id, []),
+                "storage_boundary": evidence.STORAGE_BOUNDARY}
 
 
 @app.get("/v1/contributors/{handle}", tags=["observations"])
